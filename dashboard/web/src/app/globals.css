@@ -1,0 +1,143 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --terminal-bg: #0a0a0f;
+  --terminal-surface: #12121a;
+  --terminal-border: #1e1e2e;
+  --accent-primary: #00d4aa;
+}
+
+body {
+  background: var(--terminal-bg);
+  min-height: 100vh;
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--terminal-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--terminal-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2a2a3e;
+}
+
+/* 状态指示灯 */
+.status-dot {
+  @apply w-2 h-2 rounded-full;
+}
+
+.status-dot.active {
+  @apply bg-accent-success;
+  animation: pulse 2s infinite;
+}
+
+.status-dot.frozen {
+  @apply bg-accent-warning;
+}
+
+.status-dot.inactive {
+  @apply bg-gray-500;
+}
+
+/* 卡片样式 */
+.card {
+  @apply bg-terminal-surface border border-terminal-border rounded-lg p-4;
+}
+
+.card-hover {
+  @apply card hover:border-accent-primary/50 transition-colors cursor-pointer;
+}
+
+/* 按钮样式 */
+.btn {
+  @apply px-4 py-2 rounded-md font-medium transition-all;
+}
+
+.btn-primary {
+  @apply btn bg-accent-primary text-terminal-bg hover:bg-accent-primary/90;
+}
+
+.btn-secondary {
+  @apply btn bg-terminal-muted text-gray-200 hover:bg-terminal-border;
+}
+
+.btn-danger {
+  @apply btn bg-accent-danger text-white hover:bg-accent-danger/90;
+}
+
+/* 输入框 */
+.input {
+  @apply w-full px-3 py-2 bg-terminal-bg border border-terminal-border rounded-md 
+         text-gray-100 placeholder-gray-500
+         focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/25;
+}
+
+/* 徽章 */
+.badge {
+  @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
+}
+
+.badge-success {
+  @apply badge bg-accent-success/20 text-accent-success;
+}
+
+.badge-warning {
+  @apply badge bg-accent-warning/20 text-accent-warning;
+}
+
+.badge-danger {
+  @apply badge bg-accent-danger/20 text-accent-danger;
+}
+
+.badge-info {
+  @apply badge bg-accent-primary/20 text-accent-primary;
+}
+
+/* 表格 */
+.table {
+  @apply w-full text-left;
+}
+
+.table th {
+  @apply px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider bg-terminal-muted/50;
+}
+
+.table td {
+  @apply px-4 py-3 border-t border-terminal-border;
+}
+
+.table tr:hover td {
+  @apply bg-terminal-muted/30;
+}
+
+/* 动画 */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* 研究周期状态颜色 */
+.state-idea { @apply text-gray-400; }
+.state-data { @apply text-blue-400; }
+.state-backtest { @apply text-purple-400; }
+.state-robustness { @apply text-indigo-400; }
+.state-risk { @apply text-orange-400; }
+.state-ic { @apply text-yellow-400; }
+.state-board { @apply text-accent-primary; }
+.state-archive { @apply text-gray-500; }

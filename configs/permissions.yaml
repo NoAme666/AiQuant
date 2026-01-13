@@ -1,0 +1,345 @@
+# AI Quant Company - 权限配置
+# 定义 DM 许可、会议申请资格与审批链
+
+# ============================================
+# 通信权限矩阵
+# ============================================
+communication:
+  # DM (1v1 直接消息) 权限
+  dm:
+    # 董事长（Chairman）的特殊规则
+    chairman:
+      can_dm_all: true  # 可以 DM 任何人
+      receive_dm_from: "all"  # 任何人都可以 DM 董事长
+      
+    # 部门内通信
+    intra_department:
+      allowed: true
+      description: "同部门成员可以自由 DM"
+      
+    # 跨部门通信
+    cross_department:
+      # Lead 之间可以跨部门 DM
+      lead_to_lead: true
+      # 非 Lead 只能 DM 自己的 Lead
+      member_to_cross_lead: false
+      # 跨部门 DM 需要通过 Lead 转发
+      require_lead_relay: true
+      
+    # 特殊通信通道（绕过部门限制）
+    special_channels:
+      # CRO 可以直接联系任何 Lead
+      - from: "cro"
+        to: "all_leads"
+        reason: "风险审查需要"
+        
+      # Skeptic 可以直接联系研究团队 Lead
+      - from: "skeptic"
+        to: ["alpha_a_lead", "alpha_b_lead", "head_of_research"]
+        reason: "质疑审查需要"
+        
+      # Data Auditor 可以直接联系数据工程
+      - from: "data_quality_auditor"
+        to: ["data_engineering_lead"]
+        reason: "数据质量审查需要"
+        
+      # CIO 可以直接联系所有 Lead
+      - from: "cio"
+        to: "all_leads"
+        reason: "投委会协调需要"
+
+  # MEMO (结构化备忘录) 权限
+  memo:
+    # 谁可以发布正式 Memo
+    can_publish:
+      - role: "lead"
+        description: "所有 Lead 可以发布 Memo"
+      - role: "specific"
+        agents: ["audit_compliance", "data_quality_auditor"]
+        description: "审计角色可以发布审计 Memo"
+        
+    # Memo 分发规则
+    distribution:
+      # 部门 Memo
+      department:
+        visibility: "department_and_up"
+        description: "部门 Memo 本部门及上级可见"
+      # 全公司 Memo
+      company_wide:
+        requires_approval: true
+        approver: "chief_of_staff"
+        description: "全公司 Memo 需要 CoS 批准"
+      # 董事会 Memo
+      board:
+        requires_approval: true
+        approver: "cio"
+        description: "董事会 Memo 需要 CIO 批准"
+
+# ============================================
+# 会议申请权限
+# ============================================
+meeting:
+  # 谁可以申请会议
+  can_request:
+    - role: "lead"
+      description: "只有 Lead 级别可以申请会议"
+    # 特例：审计可以申请紧急会议
+    - role: "specific"
+      agents: ["audit_compliance", "cro"]
+      condition: "urgent_only"
+      description: "审计/CRO 可申请紧急会议"
+      
+  # 会议类型与权限
+  types:
+    # 部门内会议
+    department:
+      max_participants: 5
+      duration_limit_minutes: 30
+      requires_approval_from: ["chief_of_staff"]
+      
+    # 跨部门会议
+    cross_department:
+      max_participants: 8
+      duration_limit_minutes: 45
+      requires_approval_from: ["chief_of_staff", "cio"]
+      
+    # 投委会会议
+    investment_committee:
+      fixed_participants: ["cio", "pm", "head_of_research", "cro"]
+      optional_participants: ["alpha_a_lead", "alpha_b_lead", "skeptic"]
+      duration_limit_minutes: 60
+      requires_approval_from: ["chief_of_staff", "cio"]
+      
+    # 董事会会议
+    board:
+      max_participants: 10
+      duration_limit_minutes: 90
+      requires_approval_from: ["chief_of_staff", "cio", "chairman"]
+      risk_level: "H"
+      
+    # 紧急会议
+    emergency:
+      bypass_normal_approval: true
+      requires_approval_from: ["cro", "chairman"]
+      must_document_reason: true
+
+# ============================================
+# 审批链配置
+# ============================================
+approval_chain:
+  # 会议审批链
+  meeting:
+    # 第一步：Chief of Staff 初审
+    step_1:
+      approver: "chief_of_staff"
+      criteria:
+        - "必要性：是否必须开会？能否异步解决？"
+        - "议程：是否有明确议程？"
+        - "参与者：是否都必须参加？"
+        - "预算：compute_cost 是否合理？"
+      can_reject: true
+      can_modify: true
+      timeout_hours: 4
+      
+    # 第二步：CRO 复审（条件触发）
+    step_2:
+      approver: "cro"
+      condition: "涉及风险/资金/上线/生产"
+      trigger_keywords:
+        - "risk"
+        - "production"
+        - "launch"
+        - "capital"
+        - "live"
+      criteria:
+        - "风险评估是否充分？"
+        - "是否有应急预案？"
+      can_reject: true
+      timeout_hours: 4
+      
+    # 第三步：CIO 终审
+    step_3:
+      approver: "cio"
+      criteria:
+        - "是否符合投资策略方向？"
+        - "资源分配是否合理？"
+      can_reject: true
+      timeout_hours: 8
+      
+    # 第四步：Chairman 最终批准（仅高风险）
+    step_4:
+      approver: "chairman"
+      condition: "risk_level == 'H' OR meeting_type == 'board'"
+      criteria:
+        - "是否需要董事会关注？"
+      can_reject: true
+      timeout_hours: 24
+
+  # 策略上线审批链
+  strategy_launch:
+    step_1:
+      approver: "data_quality_auditor"
+      gate: "DATA_GATE"
+      veto_power: true
+      
+    step_2:
+      approver: "backtest_lead"
+      gate: "BACKTEST_GATE"
+      
+    step_3:
+      approver: "robustness_lab"
+      gate: "ROBUSTNESS_GATE"
+      
+    step_4:
+      approver: "cro"
+      gate: "RISK_SKEPTIC_GATE"
+      veto_power: true
+      
+    step_5:
+      approver: "skeptic"
+      gate: "RISK_SKEPTIC_GATE"
+      can_force_retest: true
+      
+    step_6:
+      approver: "cio"
+      gate: "IC_REVIEW"
+      
+    step_7:
+      approver: "chairman"
+      gate: "BOARD_DECISION"
+
+# ============================================
+# 一票否决权配置
+# ============================================
+veto_power:
+  # 拥有否决权的角色
+  holders:
+    data_quality_auditor:
+      scope: "DATA_GATE"
+      description: "数据闸门否决权"
+      must_provide_reason: true
+      override_by: "chairman"  # 只有董事长可以覆盖
+      
+    cro:
+      scope: "RISK_SKEPTIC_GATE"
+      description: "风险闸门否决权"
+      must_provide_reason: true
+      override_by: "chairman"
+      
+  # 否决后的流程
+  post_veto:
+    action: "return_to_previous_gate"
+    requires_remediation_plan: true
+    cooldown_hours: 24  # 重新提交前的冷却时间
+
+# ============================================
+# 强制退回权配置
+# ============================================
+force_retest:
+  # 拥有强制退回权的角色
+  holders:
+    skeptic:
+      description: "可以强制退回要求补实验"
+      max_retests_per_strategy: 3
+      must_specify_experiments: true
+      
+  # 退回后的流程
+  post_retest:
+    return_to: "ROBUSTNESS_GATE"
+    requires_specific_experiments: true
+    deadline_hours: 48
+
+# ============================================
+# 董事长指令 (ChairmanDirective) 权限
+# ============================================
+chairman_directive:
+  # 董事长可以发布的指令类型
+  types:
+    # 调整目标/约束
+    constraint_adjustment:
+      examples:
+        - "将最大回撤要求从 20% 调整为 15%"
+        - "禁止使用某类数据源"
+      requires_audit_log: true
+      
+    # 要求补实验
+    request_experiment:
+      examples:
+        - "必须进行 walk-forward 验证"
+        - "必须测试成本翻倍情景"
+      requires_audit_log: true
+      
+    # 调整制度/权重
+    policy_adjustment:
+      examples:
+        - "调整声誉评分权重"
+        - "修改预算分配规则"
+      requires_audit_log: true
+      requires_reason: true
+      
+    # 冻结/解冻
+    freeze_unfreeze:
+      examples:
+        - "冻结某 Agent"
+        - "暂停某策略研究"
+      requires_audit_log: true
+      requires_reason: true
+      
+  # 指令不能做的事
+  restrictions:
+    - "不能直接修改策略参数"
+    - "不能绕过闸门审批"
+    - "不能删除审计日志"
+    
+  # 指令格式
+  format:
+    required_fields:
+      - "directive_id"
+      - "type"
+      - "target"  # 作用对象
+      - "content"  # 具体内容
+      - "scope"  # 作用范围（某项目/全局）
+      - "effective_period"  # 生效期限
+      - "reason"  # 原因
+    optional_fields:
+      - "conditions"  # 触发条件
+      - "expiry"  # 过期时间
+
+# ============================================
+# 回合制讨论规则
+# ============================================
+round_based_discussion:
+  # 禁止自由群聊
+  free_chat_disabled: true
+  
+  # 回合制流程
+  process:
+    step_1:
+      actor: "lead"
+      action: "发布 DiscussionPrompt"
+      constraints:
+        - "必须有明确问题"
+        - "限定回复格式"
+        - "设定字数上限"
+        
+    step_2:
+      actor: "team_members"
+      action: "分别 DM Lead"
+      constraints:
+        - "使用结构化输出"
+        - "遵守字数限制"
+        - "引用证据"
+        
+    step_3:
+      actor: "lead"
+      action: "汇总成 TeamSynthesisMemo"
+      constraints:
+        - "保留原始贡献归属"
+        - "不歪曲成员观点"
+        - "提交系统存档"
+        
+  # 审计规则
+  audit:
+    - "保存每个成员的原始回复"
+    - "可追溯 Lead 汇总是否公正"
+    - "支持审计回放"

@@ -1,0 +1,176 @@
+# {{ strategy_name }} 策略评审报告
+
+**报告日期**: {{ report_date }}
+**报告编号**: {{ report_id }}
+**策略周期**: {{ cycle_id }}
+
+---
+
+## 1. 结论与建议
+
+{% if conclusion == "APPROVE" %}
+**✅ 建议批准**
+
+{{ recommendation }}
+{% elif conclusion == "REJECT" %}
+**❌ 建议否决**
+
+{{ rejection_reason }}
+{% else %}
+**⏸️ 建议补充实验**
+
+{{ additional_tests_required }}
+{% endif %}
+
+---
+
+## 2. 核心指标
+
+| 指标 | 数值 | 基准 | 状态 |
+|------|------|------|------|
+| 年化收益 | {{ "%.2f%%"|format(metrics.annualized_return * 100) }} | >10% | {% if metrics.annualized_return > 0.10 %}✅{% else %}⚠️{% endif %} |
+| Sharpe Ratio | {{ "%.2f"|format(metrics.sharpe_ratio) }} | >1.0 | {% if metrics.sharpe_ratio > 1.0 %}✅{% else %}⚠️{% endif %} |
+| 最大回撤 | {{ "%.2f%%"|format(metrics.max_drawdown * 100) }} | <20% | {% if metrics.max_drawdown < 0.20 %}✅{% else %}⚠️{% endif %} |
+| 成本后收益 | {{ "%.2f%%"|format(metrics.net_return * 100) }} | >8% | {% if metrics.net_return > 0.08 %}✅{% else %}⚠️{% endif %} |
+| 年化换手率 | {{ "%.1fx"|format(metrics.annual_turnover) }} | <50x | {% if metrics.annual_turnover < 50 %}✅{% else %}⚠️{% endif %} |
+| 胜率 | {{ "%.1f%%"|format(metrics.win_rate * 100) }} | - | - |
+| 盈亏比 | {{ "%.2f"|format(metrics.profit_loss_ratio) }} | >1.5 | {% if metrics.profit_loss_ratio > 1.5 %}✅{% else %}⚠️{% endif %} |
+
+### 回测区间
+
+- **数据区间**: {{ backtest_period.start }} - {{ backtest_period.end }}
+- **样本内**: {{ backtest_period.in_sample_start }} - {{ backtest_period.in_sample_end }}
+- **样本外**: {{ backtest_period.out_sample_start }} - {{ backtest_period.out_sample_end }}
+
+---
+
+## 3. 风险摘要
+
+### 3.1 尾部风险
+
+| 指标 | 数值 |
+|------|------|
+| VaR (95%) | {{ "%.2f%%"|format(risk.var_95 * 100) }} |
+| CVaR (95%) | {{ "%.2f%%"|format(risk.cvar_95 * 100) }} |
+| 最大连续亏损天数 | {{ risk.max_consecutive_losses }} 天 |
+| 最大回撤持续时间 | {{ risk.max_drawdown_duration }} 天 |
+
+### 3.2 压力测试结果
+
+| 情景 | 预计损失 | 恢复时间 |
+|------|----------|----------|
+{% for scenario in stress_tests %}
+| {{ scenario.name }} | {{ "%.2f%%"|format(scenario.loss * 100) }} | {{ scenario.recovery_days }} 天 |
+{% endfor %}
+
+### 3.3 风险等级评估
+
+**整体风险等级**: {% if risk_level == "L" %}🟢 低{% elif risk_level == "M" %}🟡 中{% else %}🔴 高{% endif %}
+
+{% if risk_concerns %}
+**风险关注点**:
+{% for concern in risk_concerns %}
+- {{ concern }}
+{% endfor %}
+{% endif %}
+
+---
+
+## 4. 策略逻辑（非技术解读）
+
+### 4.1 策略简述
+
+{{ strategy_summary }}
+
+### 4.2 为什么能赚钱？
+
+{{ alpha_source }}
+
+### 4.3 何时会失效？
+
+{{ failure_conditions }}
+
+### 4.4 与现有策略的关系
+
+{% if portfolio_impact %}
+- **相关性**: {{ "%.2f"|format(portfolio_impact.correlation) }}
+- **暴露重叠**: {{ portfolio_impact.exposure_overlap }}
+- **分散效果**: {{ portfolio_impact.diversification_benefit }}
+{% else %}
+首个策略，无组合对比数据。
+{% endif %}
+
+---
+
+## 5. 上线条件
+
+### 5.1 Kill Switch 条件
+
+以下任一条件触发时，策略自动停止：
+
+{% for condition in kill_switch_conditions %}
+1. {{ condition }}
+{% endfor %}
+
+### 5.2 监控指标
+
+| 监控项 | 警告阈值 | 停止阈值 |
+|--------|----------|----------|
+{% for monitor in monitoring_items %}
+| {{ monitor.name }} | {{ monitor.warning }} | {{ monitor.stop }} |
+{% endfor %}
+
+### 5.3 初始配置
+
+- **初始资金配置**: {{ initial_allocation }}
+- **最大杠杆**: {{ max_leverage }}
+- **每日止损线**: {{ daily_stop_loss }}
+
+---
+
+## 6. 待董事会决定事项
+
+{% if decision_items %}
+{% for item in decision_items %}
+### {{ loop.index }}. {{ item.title }}
+
+{{ item.description }}
+
+**选项**:
+{% for option in item.options %}
+- [ ] {{ option }}
+{% endfor %}
+
+{% endfor %}
+{% else %}
+无需董事会特别决定的事项。
+{% endif %}
+
+---
+
+## 附录
+
+### A. 审批链记录
+
+| 阶段 | 审批人 | 决策 | 时间 |
+|------|--------|------|------|
+{% for approval in approval_chain %}
+| {{ approval.gate }} | {{ approval.approver }} | {{ approval.decision }} | {{ approval.timestamp }} |
+{% endfor %}
+
+### B. 实验 ID
+
+- **主回测**: {{ experiment_ids.main_backtest }}
+- **鲁棒性实验**: {{ experiment_ids.robustness }}
+- **压力测试**: {{ experiment_ids.stress_test }}
+
+### C. 数据版本
+
+- **DataVersionHash**: `{{ data_version_hash }}`
+- **ConfigHash**: `{{ config_hash }}`
+- **CodeCommit**: `{{ code_commit }}`
+
+---
+
+*本报告由 AI Quant Company 自动生成*
+*生成时间: {{ generated_at }}*

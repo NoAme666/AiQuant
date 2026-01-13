@@ -1,0 +1,278 @@
+# AI Quant Company - 预算策略配置
+# 定义 Compute Points 预算分配与消耗规则
+
+# ============================================
+# 预算系统概述
+# ============================================
+# Compute Points 是系统的"货币"，用于限制资源消耗
+# 每个团队每周期有固定预算，消耗完只能写 memo
+
+# ============================================
+# 周期配置
+# ============================================
+cycle:
+  # 预算周期
+  period: "weekly"
+  reset_day: "monday"
+  reset_time: "00:00"
+  timezone: "UTC"
+  
+  # 周期内规则
+  rules:
+    # 预算不可累积
+    rollover: false
+    # 借贷（下周预算提前使用）
+    borrowing:
+      enabled: false
+      max_borrow_ratio: 0.0
+
+# ============================================
+# 基础预算分配
+# ============================================
+base_allocation:
+  # 研究团队
+  research_guild:
+    alpha_team_a:
+      weekly_points: 1000
+      description: "Alpha A 团队周预算"
+    alpha_team_b:
+      weekly_points: 1000
+      description: "Alpha B 团队周预算"
+    head_of_research:
+      weekly_points: 200
+      description: "研究总监个人预算（协调用）"
+      
+  # 数据团队
+  data_guild:
+    data_engineering:
+      weekly_points: 800
+      description: "数据工程周预算"
+    data_quality_auditor:
+      weekly_points: 200
+      description: "数据审计周预算"
+      
+  # 回测团队
+  backtest_guild:
+    backtest_engineering:
+      weekly_points: 1500
+      description: "回测工程周预算（主要消耗方）"
+    transaction_cost:
+      weekly_points: 300
+      description: "成本建模周预算"
+    robustness_lab:
+      weekly_points: 500
+      description: "鲁棒性实验周预算"
+      
+  # 风控团队
+  risk_guild:
+    cro:
+      weekly_points: 300
+      description: "CRO 周预算（压力测试）"
+    skeptic:
+      weekly_points: 200
+      description: "Skeptic 周预算（补充实验）"
+    black_swan:
+      weekly_points: 200
+      description: "黑天鹅分析周预算"
+      
+  # 投委会
+  investment_committee:
+    cio:
+      weekly_points: 200
+      description: "CIO 周预算"
+    pm:
+      weekly_points: 200
+      description: "PM 周预算"
+
+# ============================================
+# 声誉调整系数
+# ============================================
+reputation_adjustment:
+  enabled: true
+  
+  # 基于声誉等级的预算调整
+  multipliers:
+    excellent:  # 0.85-1.00
+      multiplier: 1.20
+      description: "优秀表现 +20%"
+    good:  # 0.70-0.85
+      multiplier: 1.00
+      description: "良好表现，标准预算"
+    average:  # 0.50-0.70
+      multiplier: 0.90
+      description: "一般表现 -10%"
+    poor:  # 0.30-0.50
+      multiplier: 0.70
+      description: "较差表现 -30%"
+    critical:  # 0.00-0.30
+      multiplier: 0.30
+      description: "危险区域 -70%"
+
+# ============================================
+# 操作消耗表
+# ============================================
+cost_table:
+  # LLM 调用
+  llm:
+    reasoning_tier:
+      per_1k_input_tokens: 2
+      per_1k_output_tokens: 5
+    coding_tier:
+      per_1k_input_tokens: 1
+      per_1k_output_tokens: 3
+    reporting_tier:
+      per_1k_input_tokens: 2
+      per_1k_output_tokens: 4
+      
+  # 回测操作
+  backtest:
+    # 单次回测
+    single_run:
+      base_cost: 10
+      per_year: 5
+      per_asset: 2
+      description: "基础回测消耗"
+      
+    # 参数网格搜索
+    grid_search:
+      base_cost: 50
+      per_combination: 5
+      max_combinations: 100
+      description: "网格搜索消耗（受限）"
+      
+    # Walk-forward
+    walk_forward:
+      base_cost: 30
+      per_window: 10
+      description: "Walk-forward 验证消耗"
+      
+    # 蒙特卡洛模拟
+    monte_carlo:
+      base_cost: 40
+      per_simulation: 1
+      max_simulations: 1000
+      description: "蒙特卡洛模拟消耗"
+      
+  # 数据操作
+  data:
+    # 数据拉取
+    fetch:
+      base_cost: 5
+      per_symbol_day: 0.01
+      description: "数据拉取消耗"
+      
+    # 特征计算
+    feature_compute:
+      base_cost: 10
+      per_feature: 2
+      description: "特征计算消耗"
+      
+    # 数据清洗
+    cleaning:
+      base_cost: 5
+      per_million_rows: 10
+      description: "数据清洗消耗"
+      
+  # 压力测试
+  stress_test:
+    historical_scenario:
+      cost: 20
+      description: "历史情景测试"
+    hypothetical_scenario:
+      cost: 30
+      description: "假设情景测试"
+    full_suite:
+      cost: 100
+      description: "完整压力测试套件"
+      
+  # 报告生成
+  report:
+    board_pack:
+      cost: 30
+      description: "董事会报告生成"
+    research_report:
+      cost: 50
+      description: "研究报告生成"
+    memo:
+      cost: 5
+      description: "备忘录生成"
+
+# ============================================
+# 预算预警
+# ============================================
+alerts:
+  # 预警阈值
+  thresholds:
+    warning:
+      percentage: 70
+      action: "发送预警通知"
+    critical:
+      percentage: 90
+      action: "发送紧急通知 + 限制高消耗操作"
+    exhausted:
+      percentage: 100
+      action: "仅允许 memo 写作，禁止实验"
+      
+  # 通知接收者
+  recipients:
+    - "chief_of_staff"
+    - "head_of_research"
+    - "affected_team_lead"
+
+# ============================================
+# 特殊预算规则
+# ============================================
+special_rules:
+  # 紧急情况额外预算
+  emergency:
+    enabled: true
+    approver: "cio"
+    max_emergency_points: 500
+    requires_reason: true
+    
+  # 赛马奖励
+  competition_bonus:
+    alpha_race_winner:
+      bonus_points: 200
+      description: "赛马获胜奖励"
+      
+  # 跨团队借用
+  cross_team_transfer:
+    enabled: false
+    description: "禁止跨团队预算转移"
+    
+  # 预算为零时的限制
+  zero_budget:
+    allowed_actions:
+      - "write_memo"
+      - "participate_discussion"
+      - "review_documents"
+    forbidden_actions:
+      - "run_backtest"
+      - "grid_search"
+      - "stress_test"
+      - "generate_report"
+
+# ============================================
+# 审计与追踪
+# ============================================
+audit:
+  # 记录所有消耗
+  log_all_spending: true
+  
+  # 消耗报告
+  reports:
+    daily_summary:
+      enabled: true
+      recipients: ["chief_of_staff"]
+    weekly_summary:
+      enabled: true
+      recipients: ["chief_of_staff", "cio", "chairman"]
+      
+  # 异常检测
+  anomaly_detection:
+    enabled: true
+    triggers:
+      - "单日消耗 > 周预算 50%"
+      - "连续 3 天高消耗"
+      - "单次操作 > 100 点"

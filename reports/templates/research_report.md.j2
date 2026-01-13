@@ -1,0 +1,383 @@
+# {{ strategy_name }} 策略研究报告
+
+**版本**: {{ version }}
+**作者**: {{ author }}
+**团队**: {{ team }}
+**日期**: {{ report_date }}
+
+---
+
+## 目录
+
+1. [摘要](#1-摘要)
+2. [策略假设](#2-策略假设)
+3. [数据与特征](#3-数据与特征)
+4. [回测设计](#4-回测设计)
+5. [主要结果](#5-主要结果)
+6. [鲁棒性验证](#6-鲁棒性验证)
+7. [成本敏感性分析](#7-成本敏感性分析)
+8. [风险分析](#8-风险分析)
+9. [局限性与改进方向](#9-局限性与改进方向)
+10. [结论](#10-结论)
+11. [附录](#附录)
+
+---
+
+## 1. 摘要
+
+{{ abstract }}
+
+**关键发现**:
+{% for finding in key_findings %}
+- {{ finding }}
+{% endfor %}
+
+---
+
+## 2. 策略假设
+
+### 2.1 核心假设
+
+{{ core_hypothesis }}
+
+### 2.2 假设依据
+
+{{ hypothesis_rationale }}
+
+### 2.3 可证伪条件
+
+以下条件可以证伪本策略的核心假设：
+
+{% for condition in falsifiable_conditions %}
+1. {{ condition }}
+{% endfor %}
+
+### 2.4 预期失效场景
+
+{{ expected_failure_scenarios }}
+
+---
+
+## 3. 数据与特征
+
+### 3.1 数据源
+
+| 数据类型 | 来源 | 频率 | 时间范围 |
+|----------|------|------|----------|
+{% for data in data_sources %}
+| {{ data.type }} | {{ data.source }} | {{ data.frequency }} | {{ data.date_range }} |
+{% endfor %}
+
+### 3.2 数据质量报告
+
+- **缺失值处理**: {{ data_quality.missing_value_handling }}
+- **异常值处理**: {{ data_quality.outlier_handling }}
+- **复权方式**: {{ data_quality.adjustment_method }}
+
+**Data Quality Auditor 审核结果**: {% if data_quality.audit_passed %}✅ 通过{% else %}❌ 未通过{% endif %}
+
+{% if data_quality.audit_notes %}
+审核备注: {{ data_quality.audit_notes }}
+{% endif %}
+
+### 3.3 特征定义
+
+{% for feature in features %}
+#### {{ feature.name }}
+
+- **定义**: {{ feature.definition }}
+- **计算公式**: `{{ feature.formula }}`
+- **参数**: {{ feature.parameters }}
+- **滞后**: {{ feature.lag }} (避免未来函数)
+
+{% endfor %}
+
+### 3.4 数据版本
+
+```
+DataVersionHash: {{ data_version_hash }}
+特征版本: {{ feature_version }}
+```
+
+---
+
+## 4. 回测设计
+
+### 4.1 回测配置
+
+```yaml
+回测区间: {{ backtest_config.date_range }}
+初始资金: {{ backtest_config.initial_capital }}
+交易频率: {{ backtest_config.trading_frequency }}
+手续费率: {{ backtest_config.commission_rate }}
+滑点模型: {{ backtest_config.slippage_model }}
+杠杆限制: {{ backtest_config.leverage_limit }}
+```
+
+### 4.2 信号生成规则
+
+{{ signal_generation_rules }}
+
+### 4.3 仓位管理
+
+{{ position_management }}
+
+### 4.4 样本划分
+
+| 类型 | 时间范围 | 用途 |
+|------|----------|------|
+| 样本内 | {{ sample_split.in_sample }} | 参数优化 |
+| 样本外 | {{ sample_split.out_sample }} | 独立验证 |
+| 保留集 | {{ sample_split.holdout }} | 最终评估 |
+
+---
+
+## 5. 主要结果
+
+### 5.1 绩效指标
+
+#### 全样本
+
+| 指标 | 数值 |
+|------|------|
+| 年化收益 | {{ "%.2f%%"|format(results.full.annualized_return * 100) }} |
+| 年化波动率 | {{ "%.2f%%"|format(results.full.annualized_volatility * 100) }} |
+| Sharpe Ratio | {{ "%.3f"|format(results.full.sharpe_ratio) }} |
+| Sortino Ratio | {{ "%.3f"|format(results.full.sortino_ratio) }} |
+| 最大回撤 | {{ "%.2f%%"|format(results.full.max_drawdown * 100) }} |
+| Calmar Ratio | {{ "%.3f"|format(results.full.calmar_ratio) }} |
+| 胜率 | {{ "%.1f%%"|format(results.full.win_rate * 100) }} |
+| 盈亏比 | {{ "%.2f"|format(results.full.profit_loss_ratio) }} |
+| 年化换手率 | {{ "%.1fx"|format(results.full.annual_turnover) }} |
+
+#### 样本外
+
+| 指标 | 数值 | vs 样本内 |
+|------|------|-----------|
+| 年化收益 | {{ "%.2f%%"|format(results.out_sample.annualized_return * 100) }} | {{ "%.1f%%"|format((results.out_sample.annualized_return / results.in_sample.annualized_return - 1) * 100) }} |
+| Sharpe Ratio | {{ "%.3f"|format(results.out_sample.sharpe_ratio) }} | {{ "%.1f%%"|format((results.out_sample.sharpe_ratio / results.in_sample.sharpe_ratio - 1) * 100) }} |
+| 最大回撤 | {{ "%.2f%%"|format(results.out_sample.max_drawdown * 100) }} | - |
+
+### 5.2 收益曲线
+
+![收益曲线]({{ charts.equity_curve_path }})
+
+### 5.3 回撤分析
+
+![回撤分析]({{ charts.drawdown_path }})
+
+### 5.4 月度收益分布
+
+![月度收益]({{ charts.monthly_returns_path }})
+
+---
+
+## 6. 鲁棒性验证
+
+### 6.1 Walk-Forward 验证
+
+| 窗口 | 训练期 | 测试期 | Sharpe | 收益 |
+|------|--------|--------|--------|------|
+{% for window in walk_forward_results %}
+| {{ window.id }} | {{ window.train_period }} | {{ window.test_period }} | {{ "%.2f"|format(window.sharpe) }} | {{ "%.2f%%"|format(window.return * 100) }} |
+{% endfor %}
+
+**平均样本外 Sharpe**: {{ "%.3f"|format(walk_forward_avg_sharpe) }}
+
+### 6.2 参数敏感性
+
+{% for param in parameter_sensitivity %}
+#### {{ param.name }}
+
+| 参数值 | Sharpe | 收益 | 回撤 |
+|--------|--------|------|------|
+{% for value in param.values %}
+| {{ value.param }} | {{ "%.2f"|format(value.sharpe) }} | {{ "%.2f%%"|format(value.return * 100) }} | {{ "%.2f%%"|format(value.drawdown * 100) }} |
+{% endfor %}
+
+**结论**: {{ param.conclusion }}
+
+{% endfor %}
+
+### 6.3 随机化对照实验
+
+| 对照组 | Sharpe | p-value | 结论 |
+|--------|--------|---------|------|
+{% for control in randomization_tests %}
+| {{ control.name }} | {{ "%.3f"|format(control.sharpe) }} | {{ "%.4f"|format(control.p_value) }} | {% if control.p_value < 0.05 %}显著优于{% else %}无显著差异{% endif %} |
+{% endfor %}
+
+### 6.4 子样本稳定性
+
+| 市场环境 | 样本量 | Sharpe | 收益 |
+|----------|--------|--------|------|
+{% for subsample in subsample_analysis %}
+| {{ subsample.regime }} | {{ subsample.samples }} | {{ "%.2f"|format(subsample.sharpe) }} | {{ "%.2f%%"|format(subsample.return * 100) }} |
+{% endfor %}
+
+---
+
+## 7. 成本敏感性分析
+
+### 7.1 成本模型
+
+{{ cost_model_description }}
+
+### 7.2 成本分解
+
+| 成本类型 | 年化成本 | 占比 |
+|----------|----------|------|
+{% for cost in cost_breakdown %}
+| {{ cost.type }} | {{ "%.2f%%"|format(cost.annualized * 100) }} | {{ "%.1f%%"|format(cost.percentage * 100) }} |
+{% endfor %}
+
+### 7.3 成本敏感性
+
+| 成本倍数 | 净收益 | Sharpe |
+|----------|--------|--------|
+{% for scenario in cost_sensitivity %}
+| {{ scenario.multiplier }}x | {{ "%.2f%%"|format(scenario.net_return * 100) }} | {{ "%.2f"|format(scenario.sharpe) }} |
+{% endfor %}
+
+**结论**: {{ cost_sensitivity_conclusion }}
+
+### 7.4 容量估计
+
+- **估计容量**: {{ capacity_estimate }}
+- **容量限制因素**: {{ capacity_limiting_factors }}
+
+---
+
+## 8. 风险分析
+
+### 8.1 风险指标
+
+| 指标 | 数值 |
+|------|------|
+| VaR (95%, 日) | {{ "%.2f%%"|format(risk_metrics.var_95_daily * 100) }} |
+| CVaR (95%, 日) | {{ "%.2f%%"|format(risk_metrics.cvar_95_daily * 100) }} |
+| VaR (99%, 日) | {{ "%.2f%%"|format(risk_metrics.var_99_daily * 100) }} |
+| 最大连续亏损 | {{ risk_metrics.max_consecutive_losses }} 天 |
+
+### 8.2 回撤分析
+
+| 排名 | 开始日期 | 结束日期 | 深度 | 持续天数 | 恢复天数 |
+|------|----------|----------|------|----------|----------|
+{% for dd in top_drawdowns %}
+| {{ loop.index }} | {{ dd.start }} | {{ dd.end }} | {{ "%.2f%%"|format(dd.depth * 100) }} | {{ dd.duration }} | {{ dd.recovery }} |
+{% endfor %}
+
+### 8.3 压力测试
+
+{% for test in stress_tests %}
+#### {{ test.scenario }}
+
+- **假设**: {{ test.assumptions }}
+- **预计损失**: {{ "%.2f%%"|format(test.expected_loss * 100) }}
+- **恢复预期**: {{ test.recovery_expectation }}
+
+{% endfor %}
+
+### 8.4 因子暴露
+
+| 因子 | 暴露 | t-stat |
+|------|------|--------|
+{% for exposure in factor_exposures %}
+| {{ exposure.factor }} | {{ "%.3f"|format(exposure.value) }} | {{ "%.2f"|format(exposure.t_stat) }} |
+{% endfor %}
+
+---
+
+## 9. 局限性与改进方向
+
+### 9.1 已知局限性
+
+{% for limitation in limitations %}
+1. **{{ limitation.title }}**: {{ limitation.description }}
+{% endfor %}
+
+### 9.2 潜在改进方向
+
+{% for improvement in potential_improvements %}
+1. **{{ improvement.title }}**: {{ improvement.description }}
+   - 预期收益: {{ improvement.expected_benefit }}
+   - 所需资源: {{ improvement.required_resources }}
+{% endfor %}
+
+### 9.3 Skeptic 审查意见
+
+{% if skeptic_review %}
+**审查人**: {{ skeptic_review.reviewer }}
+**审查日期**: {{ skeptic_review.date }}
+
+**主要质疑**:
+{% for concern in skeptic_review.concerns %}
+- {{ concern }}
+{% endfor %}
+
+**要求的补充实验**:
+{% for experiment in skeptic_review.required_experiments %}
+- {{ experiment }}
+{% endfor %}
+
+**最终意见**: {{ skeptic_review.conclusion }}
+{% else %}
+待 Skeptic 审查
+{% endif %}
+
+---
+
+## 10. 结论
+
+{{ conclusion }}
+
+### 建议
+
+{{ recommendation }}
+
+---
+
+## 附录
+
+### A. 实验复现指引
+
+```bash
+# 复现主回测
+python -m backtest.run --experiment-id {{ experiment_ids.main }}
+
+# 复现鲁棒性实验
+python -m backtest.robustness --experiment-id {{ experiment_ids.robustness }}
+
+# 复现压力测试
+python -m backtest.stress --experiment-id {{ experiment_ids.stress }}
+```
+
+### B. 版本信息
+
+| 项目 | 值 |
+|------|------|
+| ExperimentID | `{{ experiment_id }}` |
+| DataVersionHash | `{{ data_version_hash }}` |
+| ConfigHash | `{{ config_hash }}` |
+| CodeCommit | `{{ code_commit }}` |
+| 回测引擎版本 | {{ backtest_engine_version }} |
+
+### C. 完整配置
+
+```yaml
+{{ full_config | yaml }}
+```
+
+### D. 审批链
+
+| 阶段 | 审批人 | 决策 | 意见 | 时间 |
+|------|--------|------|------|------|
+{% for approval in approval_chain %}
+| {{ approval.gate }} | {{ approval.approver }} | {{ approval.decision }} | {{ approval.comments[:50] }}... | {{ approval.timestamp }} |
+{% endfor %}
+
+---
+
+*本报告由 AI Quant Company Research Guild 生成*
+*报告 ID: {{ report_id }}*
+*生成时间: {{ generated_at }}*

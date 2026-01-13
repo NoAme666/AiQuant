@@ -1,0 +1,222 @@
+# AI Quant Company - 风险阈值配置
+# 定义各类风险限额与触发条件
+
+# ============================================
+# 策略级风险限额
+# ============================================
+strategy_limits:
+  # 收益相关
+  returns:
+    # 最低年化收益要求（扣除成本后）
+    min_annualized_return: 0.10  # 10%
+    # 最低 Sharpe Ratio
+    min_sharpe_ratio: 1.0
+    # 最低 Sortino Ratio
+    min_sortino_ratio: 1.2
+    
+  # 回撤相关
+  drawdown:
+    # 最大允许回撤
+    max_drawdown: 0.20  # 20%
+    # 回撤警告阈值
+    drawdown_warning: 0.10  # 10%
+    # 最大回撤持续时间（天）
+    max_drawdown_duration_days: 90
+    
+  # 波动率相关
+  volatility:
+    # 最大年化波动率
+    max_annualized_volatility: 0.25  # 25%
+    # 波动率警告阈值
+    volatility_warning: 0.20  # 20%
+    
+  # 换手率相关
+  turnover:
+    # 最大年化换手率
+    max_annual_turnover: 50.0  # 50x
+    # 换手率警告阈值
+    turnover_warning: 30.0  # 30x
+    
+  # 杠杆相关
+  leverage:
+    # 最大总杠杆
+    max_gross_leverage: 2.0
+    # 最大净杠杆
+    max_net_leverage: 1.5
+
+# ============================================
+# 组合级风险限额
+# ============================================
+portfolio_limits:
+  # 集中度限制
+  concentration:
+    # 单一策略最大权重
+    max_single_strategy_weight: 0.30  # 30%
+    # 单一资产最大权重
+    max_single_asset_weight: 0.20  # 20%
+    # 单一行业/板块最大暴露
+    max_sector_exposure: 0.40  # 40%
+    
+  # 相关性限制
+  correlation:
+    # 新策略与现有组合最大相关性
+    max_correlation_with_portfolio: 0.70
+    # 策略间最大相关性
+    max_pairwise_correlation: 0.60
+    
+  # 尾部风险
+  tail_risk:
+    # 最大 VaR (95%)
+    max_var_95: 0.05  # 5%
+    # 最大 CVaR (95%)
+    max_cvar_95: 0.08  # 8%
+    # 最大 VaR (99%)
+    max_var_99: 0.10  # 10%
+
+# ============================================
+# Kill Switch 条件
+# ============================================
+kill_switch:
+  # 策略级触发条件
+  strategy:
+    # 触发立即停止的条件
+    immediate_stop:
+      - condition: "daily_loss > 5%"
+        action: "停止策略，等待人工审查"
+      - condition: "drawdown > max_drawdown * 1.2"
+        action: "停止策略，触发风险审查"
+      - condition: "consecutive_losses > 10"
+        action: "停止策略，检查市场环境"
+        
+    # 触发警告的条件
+    warning:
+      - condition: "daily_loss > 3%"
+        action: "发送警告，加强监控"
+      - condition: "drawdown > max_drawdown * 0.8"
+        action: "发送警告，准备减仓"
+      - condition: "volatility_spike > 2x"
+        action: "发送警告，检查异常"
+        
+  # 组合级触发条件
+  portfolio:
+    immediate_stop:
+      - condition: "portfolio_daily_loss > 3%"
+        action: "全组合减仓 50%"
+      - condition: "portfolio_drawdown > 15%"
+        action: "全组合平仓，进入现金"
+        
+    warning:
+      - condition: "portfolio_daily_loss > 2%"
+        action: "发送警告，准备减仓"
+
+# ============================================
+# 压力测试情景
+# ============================================
+stress_scenarios:
+  # 历史危机情景
+  historical:
+    - name: "2008 金融危机"
+      id: "crisis_2008"
+      description: "全球金融危机"
+      parameters:
+        equity_drop: -0.50
+        volatility_spike: 3.0
+        correlation_increase: 0.90
+        
+    - name: "2020 COVID 崩盘"
+      id: "covid_2020"
+      description: "COVID-19 引发的市场崩盘"
+      parameters:
+        equity_drop: -0.35
+        volatility_spike: 4.0
+        correlation_increase: 0.95
+        recovery_period_days: 60
+        
+    - name: "2022 加密寒冬"
+      id: "crypto_winter_2022"
+      description: "加密货币熊市"
+      parameters:
+        crypto_drop: -0.70
+        defi_collapse: true
+        liquidity_crisis: true
+        
+  # 假设情景
+  hypothetical:
+    - name: "极端下跌"
+      id: "extreme_drop"
+      parameters:
+        market_drop: -0.30
+        duration_days: 5
+        
+    - name: "流动性枯竭"
+      id: "liquidity_crisis"
+      parameters:
+        spread_increase: 5.0
+        volume_drop: 0.80
+        
+    - name: "闪崩"
+      id: "flash_crash"
+      parameters:
+        intraday_drop: -0.15
+        recovery_hours: 2
+        
+    - name: "持续震荡"
+      id: "choppy_market"
+      parameters:
+        volatility: 0.40
+        trend: 0.0
+        duration_days: 90
+
+# ============================================
+# 审查触发条件
+# ============================================
+review_triggers:
+  # 自动触发 CRO 审查
+  cro_review:
+    - "max_drawdown > 15%"
+    - "sharpe_ratio < 0.8"
+    - "correlation_with_portfolio > 0.5"
+    - "any_stress_test_fail"
+    
+  # 自动触发 Skeptic 审查
+  skeptic_review:
+    - "sharpe_ratio_in_sample > 2.0"  # 过好可能是过拟合
+    - "parameter_sensitivity > 30%"
+    - "out_of_sample_degradation > 50%"
+    
+  # 自动触发董事会审查
+  board_review:
+    - "capital_at_risk > 10%"
+    - "new_strategy_type"
+    - "risk_level == 'H'"
+
+# ============================================
+# 风险报告配置
+# ============================================
+risk_reporting:
+  # 日报
+  daily:
+    metrics:
+      - "daily_pnl"
+      - "current_drawdown"
+      - "var_95"
+      - "active_positions"
+    recipients: ["cro", "cio", "pm"]
+    
+  # 周报
+  weekly:
+    metrics:
+      - "weekly_return"
+      - "sharpe_rolling_30d"
+      - "exposure_breakdown"
+      - "correlation_matrix"
+    recipients: ["cro", "cio", "pm", "chairman"]
+    
+  # 月报
+  monthly:
+    metrics:
+      - "monthly_return"
+      - "risk_adjusted_metrics"
+      - "stress_test_results"
+      - "kill_switch_status"
+    recipients: ["cro", "cio", "pm", "chairman", "chief_of_staff"]

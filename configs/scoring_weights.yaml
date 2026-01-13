@@ -1,0 +1,259 @@
+# AI Quant Company - 声誉评分权重配置
+# 定义 Agent 声誉系统的评分规则
+
+# ============================================
+# 声誉系统概述
+# ============================================
+# Phase A (MVP): 轻声誉 - 简单指标记录
+# Phase B (成熟): 重声誉 - 影响预算和权限
+
+# ============================================
+# 评分维度
+# ============================================
+dimensions:
+  # 1. 通过率 - 提案被采纳的比例
+  pass_rate:
+    weight: 0.25
+    description: "提案/策略通过各闸门的比例"
+    calculation: "passed_proposals / total_proposals"
+    decay_period_days: 90  # 90天衰减
+    
+  # 2. 退回率 - 被退回要求补实验的比例
+  return_rate:
+    weight: 0.20
+    description: "被退回要求补充工作的比例（越低越好）"
+    calculation: "1 - (returned_proposals / total_proposals)"
+    decay_period_days: 90
+    
+  # 3. 预算效率 - 产出/消耗比
+  budget_efficiency:
+    weight: 0.20
+    description: "每单位预算点数的有效产出"
+    calculation: "valuable_outputs / compute_points_spent"
+    decay_period_days: 60
+    
+  # 4. 事后表现 - 策略上线后的实际表现
+  post_launch_performance:
+    weight: 0.25
+    description: "上线策略的实际表现 vs 预期"
+    calculation: "actual_sharpe / predicted_sharpe"
+    decay_period_days: 180
+    
+  # 5. 协作评价 - 跨部门协作质量
+  collaboration_score:
+    weight: 0.10
+    description: "其他 Agent 的协作评价"
+    calculation: "avg(peer_ratings)"
+    decay_period_days: 90
+
+# ============================================
+# 角色特定权重调整
+# ============================================
+role_adjustments:
+  # 研究团队 - 更重视通过率和事后表现
+  research:
+    pass_rate: 0.30
+    post_launch_performance: 0.30
+    budget_efficiency: 0.20
+    return_rate: 0.15
+    collaboration_score: 0.05
+    
+  # 数据团队 - 更重视质量和效率
+  data:
+    pass_rate: 0.15
+    budget_efficiency: 0.30
+    return_rate: 0.25
+    collaboration_score: 0.20
+    post_launch_performance: 0.10
+    
+  # 风控团队 - 更重视准确性
+  risk:
+    # 误杀率：否决了实际有效的策略
+    false_negative_rate:
+      weight: 0.25
+      description: "错误否决有效策略的比例（越低越好）"
+    # 漏检率：放过了实际有问题的策略
+    false_positive_rate:
+      weight: 0.35
+      description: "错误放行问题策略的比例（越低越好）"
+    collaboration_score: 0.20
+    budget_efficiency: 0.20
+
+# ============================================
+# 评分等级
+# ============================================
+grades:
+  excellent:
+    range: [0.85, 1.00]
+    label: "优秀"
+    color: "#22c55e"
+    privileges:
+      - "预算 +20%"
+      - "优先上会资格"
+      - "可指导新人"
+      
+  good:
+    range: [0.70, 0.85]
+    label: "良好"
+    color: "#3b82f6"
+    privileges:
+      - "预算标准"
+      - "正常上会资格"
+      
+  average:
+    range: [0.50, 0.70]
+    label: "一般"
+    color: "#f59e0b"
+    restrictions:
+      - "预算 -10%"
+      - "提案需额外审核"
+      
+  poor:
+    range: [0.30, 0.50]
+    label: "较差"
+    color: "#ef4444"
+    restrictions:
+      - "预算 -30%"
+      - "不可发起提案"
+      - "需要改进计划"
+      
+  critical:
+    range: [0.00, 0.30]
+    label: "危险"
+    color: "#7f1d1d"
+    restrictions:
+      - "冻结实验权限"
+      - "仅可参与讨论"
+      - "需要重新培训"
+
+# ============================================
+# 声誉变动事件
+# ============================================
+events:
+  # 正向事件
+  positive:
+    proposal_passed:
+      points: 10
+      description: "提案通过闸门"
+      
+    strategy_launched:
+      points: 50
+      description: "策略成功上线"
+      
+    strategy_outperforms:
+      points: 30
+      description: "策略表现超预期"
+      
+    valuable_insight:
+      points: 15
+      description: "提供有价值的见解/发现问题"
+      
+    efficient_work:
+      points: 5
+      description: "高效完成任务"
+      
+  # 负向事件
+  negative:
+    proposal_rejected:
+      points: -5
+      description: "提案被否决"
+      
+    returned_for_rework:
+      points: -10
+      description: "被退回补充工作"
+      
+    strategy_underperforms:
+      points: -30
+      description: "策略表现不及预期"
+      
+    data_quality_issue:
+      points: -25
+      description: "数据质量问题（未被审计发现）"
+      
+    overfitting_detected:
+      points: -40
+      description: "事后发现过拟合"
+      
+    budget_waste:
+      points: -15
+      description: "预算浪费（无有效产出）"
+      
+    collaboration_complaint:
+      points: -10
+      description: "协作问题投诉"
+
+# ============================================
+# 惩罚机制
+# ============================================
+penalties:
+  # 冻结条件
+  freeze:
+    conditions:
+      - "score < 0.30 连续 2 周"
+      - "严重误导 3 次"
+      - "预算严重超支"
+    duration_days: 14
+    restrictions:
+      - "不能发起实验"
+      - "不能发起提案"
+      - "只能参与讨论"
+    recovery:
+      - "完成改进计划"
+      - "通过评估测试"
+      
+  # 停用条件
+  deactivation:
+    conditions:
+      - "冻结后无改善"
+      - "score < 0.20 连续 4 周"
+      - "重大违规"
+    action: "归档，不再参与"
+    requires_chairman_approval: true
+
+# ============================================
+# 激励机制
+# ============================================
+incentives:
+  # 声誉奖励
+  reputation_bonus:
+    top_performer:
+      criteria: "季度 top 20%"
+      reward: "预算 +30%"
+      
+    most_improved:
+      criteria: "最大进步（声誉提升 > 20%）"
+      reward: "特别表彰 + 预算 +10%"
+      
+  # 竞争奖励
+  competition:
+    alpha_race_winner:
+      description: "A/B 赛马获胜"
+      reward:
+        - "预算 +20%"
+        - "下轮优先选题权"
+        
+    skeptic_catch:
+      description: "Skeptic 发现重大问题"
+      reward: "声誉 +20 点"
+
+# ============================================
+# 评分计算配置
+# ============================================
+calculation:
+  # 更新频率
+  update_frequency: "daily"
+  
+  # 时间衰减
+  time_decay:
+    enabled: true
+    half_life_days: 60
+    
+  # 最小样本量
+  min_samples:
+    for_rating: 5
+    for_comparison: 10
+    
+  # 平滑处理
+  smoothing:
+    enabled: true
+    window_days: 7
