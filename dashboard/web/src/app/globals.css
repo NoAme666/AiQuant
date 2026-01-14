@@ -5,8 +5,14 @@
 :root {
   --terminal-bg: #0a0a0f;
   --terminal-surface: #12121a;
-  --terminal-border: #1e1e2e;
+  --terminal-muted: #1a1a24;
+  --terminal-border: #252532;
   --accent-primary: #00d4aa;
+  --accent-secondary: #6366f1;
+  --accent-warning: #f59e0b;
+  --accent-danger: #ef4444;
+  --accent-success: #22c55e;
+  --accent-info: #3b82f6;
 }
 
 body {
@@ -16,31 +22,32 @@ body {
 
 /* 自定义滚动条 */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--terminal-bg);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
   background: var(--terminal-border);
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #2a2a3e;
+  background: #3a3a4e;
 }
 
 /* 状态指示灯 */
 .status-dot {
-  @apply w-2 h-2 rounded-full;
+  @apply w-2 h-2 rounded-full flex-shrink-0;
 }
 
 .status-dot.active {
   @apply bg-accent-success;
-  animation: pulse 2s infinite;
+  box-shadow: 0 0 8px var(--accent-success);
+  animation: pulse-glow 2s infinite;
 }
 
 .status-dot.frozen {
@@ -48,7 +55,7 @@ body {
 }
 
 .status-dot.inactive {
-  @apply bg-gray-500;
+  @apply bg-gray-600;
 }
 
 /* 卡片样式 */
@@ -57,31 +64,45 @@ body {
 }
 
 .card-hover {
-  @apply card hover:border-accent-primary/50 transition-colors cursor-pointer;
+  @apply card hover:border-accent-primary/40 hover:bg-terminal-muted/50 transition-all cursor-pointer;
+}
+
+.card-glow {
+  @apply card;
+  box-shadow: 0 0 20px rgba(0, 212, 170, 0.05);
 }
 
 /* 按钮样式 */
 .btn {
-  @apply px-4 py-2 rounded-md font-medium transition-all;
+  @apply px-4 py-2 rounded-md font-medium transition-all duration-200;
 }
 
 .btn-primary {
-  @apply btn bg-accent-primary text-terminal-bg hover:bg-accent-primary/90;
+  @apply btn bg-accent-primary text-terminal-bg hover:bg-accent-primary/90 hover:shadow-lg hover:shadow-accent-primary/20;
 }
 
 .btn-secondary {
-  @apply btn bg-terminal-muted text-gray-200 hover:bg-terminal-border;
+  @apply btn bg-terminal-muted text-gray-200 border border-terminal-border hover:bg-terminal-border hover:border-gray-500;
 }
 
 .btn-danger {
-  @apply btn bg-accent-danger text-white hover:bg-accent-danger/90;
+  @apply btn bg-accent-danger/20 text-accent-danger border border-accent-danger/30 hover:bg-accent-danger hover:text-white;
+}
+
+.btn-ghost {
+  @apply btn text-gray-400 hover:text-gray-200 hover:bg-terminal-muted;
+}
+
+.btn-sm {
+  @apply px-3 py-1.5 text-sm;
 }
 
 /* 输入框 */
 .input {
   @apply w-full px-3 py-2 bg-terminal-bg border border-terminal-border rounded-md 
          text-gray-100 placeholder-gray-500
-         focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/25;
+         focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/20
+         transition-all;
 }
 
 /* 徽章 */
@@ -89,47 +110,126 @@ body {
   @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
 }
 
+.badge-primary {
+  @apply badge bg-accent-primary/15 text-accent-primary border border-accent-primary/30;
+}
+
 .badge-success {
-  @apply badge bg-accent-success/20 text-accent-success;
+  @apply badge bg-accent-success/15 text-accent-success border border-accent-success/30;
 }
 
 .badge-warning {
-  @apply badge bg-accent-warning/20 text-accent-warning;
+  @apply badge bg-accent-warning/15 text-accent-warning border border-accent-warning/30;
 }
 
 .badge-danger {
-  @apply badge bg-accent-danger/20 text-accent-danger;
+  @apply badge bg-accent-danger/15 text-accent-danger border border-accent-danger/30;
 }
 
 .badge-info {
-  @apply badge bg-accent-primary/20 text-accent-primary;
+  @apply badge bg-accent-info/15 text-accent-info border border-accent-info/30;
+}
+
+.badge-neutral {
+  @apply badge bg-gray-500/15 text-gray-400 border border-gray-500/30;
 }
 
 /* 表格 */
 .table {
-  @apply w-full text-left;
+  @apply w-full text-left text-sm;
 }
 
 .table th {
-  @apply px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider bg-terminal-muted/50;
+  @apply px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-terminal-muted/30 first:rounded-tl-lg last:rounded-tr-lg;
 }
 
 .table td {
-  @apply px-4 py-3 border-t border-terminal-border;
+  @apply px-4 py-3 border-t border-terminal-border/50;
 }
 
 .table tr:hover td {
-  @apply bg-terminal-muted/30;
+  @apply bg-terminal-muted/20;
+}
+
+/* 导航栏项目 */
+.nav-item {
+  @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 
+         hover:text-gray-100 hover:bg-terminal-muted transition-all;
+}
+
+.nav-item.active {
+  @apply text-accent-primary bg-accent-primary/10 border-l-2 border-accent-primary;
+}
+
+/* 侧边栏分组标题 */
+.nav-group-title {
+  @apply text-[10px] font-semibold uppercase tracking-widest text-gray-500 px-3 mb-2;
+}
+
+/* 顶部状态条 */
+.top-bar {
+  @apply h-12 bg-terminal-surface border-b border-terminal-border flex items-center px-4 gap-4;
+}
+
+/* 页面标题 */
+.page-title {
+  @apply text-2xl font-bold text-gray-100;
+}
+
+.page-subtitle {
+  @apply text-sm text-gray-500 mt-1;
+}
+
+/* 统计卡片 */
+.stat-card {
+  @apply card flex flex-col;
+}
+
+.stat-value {
+  @apply text-3xl font-bold text-gray-100 mt-2;
+}
+
+.stat-label {
+  @apply text-sm text-gray-400;
+}
+
+.stat-change {
+  @apply text-xs mt-1;
+}
+
+.stat-change.positive {
+  @apply text-accent-success;
+}
+
+.stat-change.negative {
+  @apply text-accent-danger;
 }
 
 /* 动画 */
-@keyframes pulse {
+@keyframes pulse-glow {
   0%, 100% {
     opacity: 1;
+    box-shadow: 0 0 8px var(--accent-success);
   }
   50% {
-    opacity: 0.5;
+    opacity: 0.6;
+    box-shadow: 0 0 4px var(--accent-success);
   }
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
 }
 
 /* 研究周期状态颜色 */
@@ -141,3 +241,48 @@ body {
 .state-ic { @apply text-yellow-400; }
 .state-board { @apply text-accent-primary; }
 .state-archive { @apply text-gray-500; }
+
+/* 交易状态颜色 */
+.trade-buy { @apply text-accent-success; }
+.trade-sell { @apply text-accent-danger; }
+.trade-pending { @apply text-accent-warning; }
+
+/* 消息气泡 */
+.message-bubble {
+  @apply max-w-[80%] px-4 py-2 rounded-2xl;
+}
+
+.message-bubble.sent {
+  @apply bg-accent-primary/20 text-gray-100 ml-auto rounded-br-sm;
+}
+
+.message-bubble.received {
+  @apply bg-terminal-muted text-gray-200 mr-auto rounded-bl-sm;
+}
+
+/* 加载动画 */
+.loading-dots::after {
+  content: '';
+  animation: loading-dots 1.5s infinite;
+}
+
+@keyframes loading-dots {
+  0% { content: '.'; }
+  33% { content: '..'; }
+  66% { content: '...'; }
+}
+
+/* 数字高亮 */
+.number-highlight {
+  @apply font-mono tabular-nums;
+}
+
+/* 图表容器 */
+.chart-container {
+  @apply bg-terminal-bg rounded-lg p-4 border border-terminal-border/50;
+}
+
+/* 工具提示 */
+.tooltip {
+  @apply absolute z-50 px-3 py-2 text-sm bg-terminal-surface border border-terminal-border rounded-lg shadow-xl;
+}

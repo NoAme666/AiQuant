@@ -1,0 +1,150 @@
+# 合规审计报告
+
+**报告编号**: {{ report_id }}  
+**审计日期**: {{ date }}  
+**生成时间**: {{ report_date }}
+
+---
+
+## 审计摘要
+
+| 项目 | 状态 |
+|------|------|
+| **审计范围** | {{ audit_scope | default('全公司') }} |
+| **发现违规** | {{ violations | length }} 项 |
+| **风险警报** | {{ risk_alerts | default([]) | length }} 项 |
+| **整体评估** | {{ overall_status | default('正常') }} |
+
+---
+
+## 一、Agent 活动审计
+
+### 活动统计
+
+{% if agent_activities %}
+| Agent | 部门 | 任务完成 | 工具调用 | 预算消耗 | 异常数 |
+|-------|------|----------|----------|----------|--------|
+{% for agent in agent_activities %}
+| {{ agent.name }} | {{ agent.department }} | {{ agent.tasks }} | {{ agent.tool_calls }} | {{ agent.budget_used }} | {{ agent.anomalies | default(0) }} |
+{% endfor %}
+{% else %}
+*无 Agent 活动记录*
+{% endif %}
+
+### 异常行为检测
+
+{% if anomaly_detections %}
+{% for anomaly in anomaly_detections %}
+- **[{{ anomaly.severity }}]** {{ anomaly.agent }}: {{ anomaly.description }}
+{% endfor %}
+{% else %}
+*未检测到异常行为*
+{% endif %}
+
+---
+
+## 二、违规记录
+
+{% if violations %}
+{% for v in violations %}
+### 违规 {{ loop.index }}: {{ v.type }}
+
+| 项目 | 详情 |
+|------|------|
+| **违规 Agent** | {{ v.agent }} |
+| **违规时间** | {{ v.timestamp | datetime }} |
+| **违规类型** | {{ v.type }} |
+| **严重程度** | {{ v.severity }} |
+| **描述** | {{ v.description }} |
+| **处理状态** | {{ v.status | default('待处理') }} |
+| **建议措施** | {{ v.recommended_action | default('警告') }} |
+
+{% endfor %}
+{% else %}
+**✅ 未发现违规行为**
+{% endif %}
+
+---
+
+## 三、预算使用审计
+
+### 部门预算概况
+
+{% if budget_usage %}
+| 部门 | 分配预算 | 已使用 | 使用率 | 状态 |
+|------|----------|--------|--------|------|
+{% for dept, budget in budget_usage.items() %}
+| {{ dept }} | {{ budget.allocated }} | {{ budget.used }} | {{ budget.usage_rate | percent }} | {{ '🟢' if budget.usage_rate < 0.9 else '🟡' if budget.usage_rate < 1.0 else '🔴' }} |
+{% endfor %}
+{% endif %}
+
+### 异常消耗
+
+{% if budget_anomalies %}
+{% for anomaly in budget_anomalies %}
+- {{ anomaly }}
+{% endfor %}
+{% else %}
+*无异常预算消耗*
+{% endif %}
+
+---
+
+## 四、审计发现
+
+{% if audit_findings %}
+{% for finding in audit_findings %}
+### {{ loop.index }}. {{ finding.title }}
+
+**类别**: {{ finding.category }}  
+**严重性**: {{ finding.severity }}  
+
+{{ finding.description }}
+
+{% if finding.evidence %}
+**证据**:
+```
+{{ finding.evidence }}
+```
+{% endif %}
+
+**建议**: {{ finding.recommendation }}
+
+---
+{% endfor %}
+{% else %}
+*本次审计未发现重大问题*
+{% endif %}
+
+---
+
+## 五、流程合规检查
+
+| 检查项 | 状态 | 说明 |
+|--------|------|------|
+| 实验四件套完整性 | {{ '✅' if checks.experiment_quartet | default(true) else '❌' }} | ExperimentID, DataVersionHash, CodeCommit, ConfigHash |
+| 审批流程遵循 | {{ '✅' if checks.approval_flow | default(true) else '❌' }} | 所有决策经过规定审批 |
+| 会议申请规范 | {{ '✅' if checks.meeting_requests | default(true) else '❌' }} | 会议申请有明确议程 |
+| 记忆写入审批 | {{ '✅' if checks.memory_approval | default(true) else '❌' }} | team/org 记忆经过审批 |
+| 交易审批执行 | {{ '✅' if checks.trading_approval | default(true) else '❌' }} | 实盘交易经董事长批准 |
+
+---
+
+## 六、合规建议
+
+{% if compliance_recommendations %}
+{% for rec in compliance_recommendations %}
+{{ loop.index }}. {{ rec }}
+{% endfor %}
+{% else %}
+1. 继续保持当前合规水平
+2. 定期进行流程培训
+3. 加强异常监控
+{% endif %}
+
+---
+
+**审计员**: {{ auditor | default('CGO (首席治理官)') }}  
+**报告生成时间**: {{ generated_at }}
+
+*此报告由 AI Quant Company 合规系统自动生成*

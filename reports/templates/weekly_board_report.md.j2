@@ -1,0 +1,184 @@
+# AI Quant Company 周度董事会汇报
+
+**报告编号**: {{ report_id }}  
+**汇报周期**: {{ week_start }} ~ {{ week_end }}  
+**生成日期**: {{ report_date }}
+
+---
+
+## 本周要点
+
+{% for highlight in highlights %}
+{{ loop.index }}. {{ highlight }}
+{% endfor %}
+
+---
+
+## 一、研究进展
+
+### 活跃研究周期
+
+{% if research_progress %}
+| 策略名称 | 阶段 | 负责人 | 进度 | 下一步 |
+|----------|------|--------|------|--------|
+{% for item in research_progress %}
+| {{ item.strategy_name }} | {{ item.stage }} | {{ item.owner }} | {{ item.progress | percent }} | {{ item.next_step }} |
+{% endfor %}
+{% else %}
+*本周无活跃研究周期*
+{% endif %}
+
+### 研究成果
+
+- **新提出策略**: {{ research_summary.new_ideas | default(0) }} 个
+- **完成回测**: {{ research_summary.backtests_completed | default(0) }} 个
+- **通过风控**: {{ research_summary.risk_approved | default(0) }} 个
+- **待董事会决策**: {{ research_summary.pending_board | default(0) }} 个
+
+---
+
+## 二、交易执行
+
+### 本周交易汇总
+
+| 指标 | 数值 |
+|------|------|
+| **执行计划数** | {{ trading_summary.plans_executed | default(0) }} |
+| **总交易笔数** | {{ trading_summary.total_trades | default(0) }} |
+| **总交易金额** | ${{ trading_summary.total_volume | default(0) | number }} |
+| **净盈亏** | ${{ trading_summary.net_pnl | default(0) | number }} |
+| **平均滑点** | {{ trading_summary.avg_slippage | default(0) | number }} bps |
+
+### 持仓概况
+
+{% if trading_summary.positions %}
+| 交易对 | 持仓方向 | 当前价值 | 未实现盈亏 | 持仓占比 |
+|--------|----------|----------|------------|----------|
+{% for pos in trading_summary.positions %}
+| {{ pos.symbol }} | {{ pos.side }} | ${{ pos.value | number }} | ${{ pos.unrealized_pnl | number }} | {{ pos.weight | percent }} |
+{% endfor %}
+{% else %}
+*当前无持仓*
+{% endif %}
+
+---
+
+## 三、风险状况
+
+### 关键风险指标
+
+| 指标 | 当前值 | 限额 | 状态 |
+|------|--------|------|------|
+| 总敞口 | {{ risk_summary.total_exposure | default(0) | percent }} | 100% | {{ '🟢' if (risk_summary.total_exposure | default(0)) <= 1.0 else '🔴' }} |
+| 单一资产最大敞口 | {{ risk_summary.max_single_exposure | default(0) | percent }} | 20% | {{ '🟢' if (risk_summary.max_single_exposure | default(0)) <= 0.2 else '🔴' }} |
+| 周度 VaR (95%) | ${{ risk_summary.var_95 | default(0) | number }} | ${{ risk_summary.var_limit | default(5000) | number }} | {{ '🟢' if (risk_summary.var_95 | default(0)) <= (risk_summary.var_limit | default(5000)) else '🔴' }} |
+| 最大回撤 | {{ risk_summary.max_drawdown | default(0) | percent }} | -10% | {{ '🟢' if (risk_summary.max_drawdown | default(0)) >= -0.1 else '🔴' }} |
+
+### 风险事件
+
+{% if risk_summary.events %}
+{% for event in risk_summary.events %}
+- **[{{ event.severity }}]** {{ event.description }} ({{ event.date }})
+{% endfor %}
+{% else %}
+*本周无重大风险事件*
+{% endif %}
+
+---
+
+## 四、Agent 绩效
+
+### 部门绩效排名
+
+{% if agent_performance %}
+| 部门 | 任务完成 | 平均声誉 | 预算使用率 | 贡献度 |
+|------|----------|----------|------------|--------|
+{% for dept in agent_performance %}
+| {{ dept.department }} | {{ dept.tasks_completed }} | {{ dept.avg_reputation | percent }} | {{ dept.budget_usage | percent }} | {{ dept.contribution | percent }} |
+{% endfor %}
+{% endif %}
+
+### 重点关注
+
+{% if agent_concerns %}
+{% for concern in agent_concerns %}
+- {{ concern }}
+{% endfor %}
+{% else %}
+*无需特别关注的 Agent 问题*
+{% endif %}
+
+---
+
+## 五、待董事会决定事项
+
+{% if pending_items %}
+{% for item in pending_items %}
+### {{ loop.index }}. {{ item.title }}
+
+**类型**: {{ item.type }}  
+**申请人**: {{ item.requester }}  
+**提交日期**: {{ item.submitted_at | datetime }}
+
+{{ item.description }}
+
+{% if item.options %}
+**选项**:
+{% for option in item.options %}
+- [ ] {{ option }}
+{% endfor %}
+{% endif %}
+
+---
+{% endfor %}
+{% else %}
+*本周无需董事会特别决定的事项*
+{% endif %}
+
+---
+
+## 六、组织与工具建议
+
+### 能力缺口
+
+{% if capability_gaps %}
+{% for gap in capability_gaps %}
+- {{ gap }}
+{% endfor %}
+{% else %}
+*当前无明显能力缺口*
+{% endif %}
+
+### 改进建议
+
+{% if recommendations %}
+{% for rec in recommendations %}
+**{{ loop.index }}. {{ rec.title }}**
+
+- 优先级: {{ rec.priority }}
+- 建议: {{ rec.suggestion }}
+- 预期收益: {{ rec.expected_benefit }}
+{% endfor %}
+{% else %}
+*无改进建议*
+{% endif %}
+
+---
+
+## 下周计划
+
+{% if next_week_plan %}
+{% for item in next_week_plan %}
+{{ loop.index }}. {{ item }}
+{% endfor %}
+{% else %}
+1. 继续推进当前研究周期
+2. 监控现有持仓
+3. 定期风险评估
+{% endif %}
+
+---
+
+**报告生成时间**: {{ generated_at }}
+
+*此报告由 AI Quant Company 系统自动生成*

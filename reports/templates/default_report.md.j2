@@ -1,0 +1,64 @@
+# {{ title | default('AI Quant Company Report') }}
+
+**报告编号**: {{ report_id }}  
+**报告类型**: {{ report_type }}  
+**生成日期**: {{ report_date }}  
+{% if author %}**作者**: {{ author }}{% endif %}
+
+---
+
+## 报告内容
+
+{% if summary %}
+### 摘要
+
+{{ summary }}
+
+---
+{% endif %}
+
+{% if sections %}
+{% for section in sections %}
+### {{ section.title }}
+
+{{ section.content }}
+
+{% if section.table %}
+{% for row in section.table %}
+| {% for cell in row %}{{ cell }} | {% endfor %}
+{% endfor %}
+{% endif %}
+
+---
+{% endfor %}
+{% endif %}
+
+{% if data %}
+### 数据
+
+```yaml
+{{ data | yaml }}
+```
+{% endif %}
+
+{% if conclusions %}
+### 结论
+
+{% for conclusion in conclusions %}
+- {{ conclusion }}
+{% endfor %}
+{% endif %}
+
+{% if recommendations %}
+### 建议
+
+{% for rec in recommendations %}
+{{ loop.index }}. {{ rec }}
+{% endfor %}
+{% endif %}
+
+---
+
+**生成时间**: {{ generated_at }}
+
+*此报告由 AI Quant Company 系统自动生成*

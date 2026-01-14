@@ -1378,6 +1378,210 @@ $$ LANGUAGE plpgsql;
 -- 触发器
 -- ============================================
 
+-- ============================================
+-- 交易系统表
+-- ============================================
+
+-- 交易计划状态
+CREATE TYPE trading_plan_state AS ENUM (
+    'DRAFT',
+    'SIMULATION_PENDING',
+    'SIMULATION_RUNNING',
+    'SIMULATION_COMPLETED',
+    'REVIEW_BY_TRADER',
+    'PENDING_CHAIRMAN',
+    'APPROVED',
+    'LIVE_PENDING',
+    'LIVE_EXECUTING',
+    'LIVE_COMPLETED',
+    'MONITORING',
+    'CLOSED',
+    'REJECTED',
+    'CANCELLED'
+);
+
+-- 订单类型
+CREATE TYPE order_type AS ENUM (
+    'MARKET',
+    'LIMIT',
+    'STOP',
+    'STOP_LIMIT'
+);
+
+-- 订单方向
+CREATE TYPE order_side AS ENUM (
+    'BUY',
+    'SELL'
+);
+
+-- 订单状态
+CREATE TYPE order_status AS ENUM (
+    'PENDING',
+    'SUBMITTED',
+    'FILLED',
+    'PARTIAL',
+    'CANCELLED',
+    'FAILED'
+);
+
+-- 交易计划表
+CREATE TABLE trading_plans (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    
+    -- 关联
+    strategy_id UUID,
+    experiment_id UUID REFERENCES experiments(id),
+    cycle_id UUID REFERENCES research_cycles(id),
+    
+    -- 基本信息
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    created_by VARCHAR(64) NOT NULL,  -- agent_id
+    
+    -- 交易目标
+    target_portfolio JSONB DEFAULT '{}',
+    current_portfolio JSONB DEFAULT '{}',
+    
+    -- 风险参数
+    max_position_size DECIMAL(5, 4) DEFAULT 0.1,
+    max_total_exposure DECIMAL(5, 4) DEFAULT 1.0,
+    stop_loss_pct DECIMAL(5, 4) DEFAULT 0.05,
+    take_profit_pct DECIMAL(5, 4),
+    max_slippage_bps INT DEFAULT 50,
+    
+    -- 执行参数
+    execution_style VARCHAR(32) DEFAULT 'twap',
+    execution_window_minutes INT DEFAULT 60,
+    
+    -- 状态
+    state trading_plan_state DEFAULT 'DRAFT',
+    
+    -- 模拟结果
+    simulation_result JSONB,
+    
+    -- 审批信息
+    trader_approval JSONB,
+    chairman_approval JSONB,
+    
+    -- 执行结果
+    execution_summary JSONB,
+    realized_pnl DECIMAL(20, 8) DEFAULT 0,
+    unrealized_pnl DECIMAL(20, 8) DEFAULT 0,
+    
+    -- 时间戳
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    submitted_at TIMESTAMPTZ,
+    approved_at TIMESTAMPTZ,
+    executed_at TIMESTAMPTZ,
+    closed_at TIMESTAMPTZ
+);
+
+-- 交易订单表
+CREATE TABLE trading_orders (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    plan_id UUID REFERENCES trading_plans(id),
+    
+    -- 订单参数
+    symbol VARCHAR(32) NOT NULL,
+    side order_side NOT NULL,
+    order_type order_type DEFAULT 'MARKET',
+    quantity DECIMAL(24, 8) NOT NULL,
+    price DECIMAL(24, 8),
+    stop_price DECIMAL(24, 8),
+    
+    -- 执行参数
+    execution_type VARCHAR(32) DEFAULT 'simulation',
+    time_in_force VARCHAR(10) DEFAULT 'GTC',
+    max_slippage_bps INT DEFAULT 50,
+    
+    -- 执行结果
+    status order_status DEFAULT 'PENDING',
+    filled_quantity DECIMAL(24, 8) DEFAULT 0,
+    average_price DECIMAL(24, 8) DEFAULT 0,
+    commission DECIMAL(20, 8) DEFAULT 0,
+    slippage_bps DECIMAL(10, 4) DEFAULT 0,
+    
+    -- 时间戳
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    submitted_at TIMESTAMPTZ,
+    filled_at TIMESTAMPTZ,
+    
+    -- 交易所信息
+    exchange VARCHAR(32),
+    exchange_order_id VARCHAR(64),
+    execution_log JSONB DEFAULT '[]'
+);
+
+-- 持仓表
+CREATE TABLE positions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    plan_id UUID REFERENCES trading_plans(id),
+    
+    -- 持仓信息
+    symbol VARCHAR(32) NOT NULL,
+    side VARCHAR(10) NOT NULL,  -- long, short
+    quantity DECIMAL(24, 8) NOT NULL,
+    entry_price DECIMAL(24, 8) NOT NULL,
+    current_price DECIMAL(24, 8),
+    
+    -- 盈亏
+    unrealized_pnl DECIMAL(20, 8) DEFAULT 0,
+    unrealized_pnl_pct DECIMAL(10, 6) DEFAULT 0,
+    realized_pnl DECIMAL(20, 8) DEFAULT 0,
+    
+    -- 风控
+    stop_loss DECIMAL(24, 8),
+    take_profit DECIMAL(24, 8),
+    
+    -- 状态
+    is_open BOOLEAN DEFAULT TRUE,
+    
+    -- 时间戳
+    opened_at TIMESTAMPTZ DEFAULT NOW(),
+    closed_at TIMESTAMPTZ,
+    last_updated TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 交易执行日志
+CREATE TABLE trade_executions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    order_id UUID REFERENCES trading_orders(id),
+    plan_id UUID REFERENCES trading_plans(id),
+    
+    -- 执行信息
+    symbol VARCHAR(32) NOT NULL,
+    side order_side NOT NULL,
+    quantity DECIMAL(24, 8) NOT NULL,
+    price DECIMAL(24, 8) NOT NULL,
+    
+    -- 成本
+    commission DECIMAL(20, 8) DEFAULT 0,
+    slippage_bps DECIMAL(10, 4) DEFAULT 0,
+    
+    -- 时间
+    executed_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    -- 元数据
+    exchange VARCHAR(32),
+    exchange_trade_id VARCHAR(64),
+    metadata JSONB DEFAULT '{}'
+);
+
+-- 索引
+CREATE INDEX idx_trading_plans_state ON trading_plans(state);
+CREATE INDEX idx_trading_plans_created_by ON trading_plans(created_by);
+CREATE INDEX idx_trading_orders_plan ON trading_orders(plan_id);
+CREATE INDEX idx_trading_orders_status ON trading_orders(status);
+CREATE INDEX idx_positions_plan ON positions(plan_id);
+CREATE INDEX idx_positions_symbol ON positions(symbol);
+CREATE INDEX idx_positions_open ON positions(is_open) WHERE is_open = TRUE;
+CREATE INDEX idx_trade_executions_plan ON trade_executions(plan_id);
+
+-- ============================================
+-- 触发器
+-- ============================================
+
 -- 更新时间戳触发器
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER AS $$

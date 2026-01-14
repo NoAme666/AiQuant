@@ -1,0 +1,93 @@
+# 交易执行报告
+
+**报告编号**: {{ report_id }}  
+**交易计划**: {{ plan_name }}  
+**计划 ID**: `{{ plan_id }}`  
+**生成日期**: {{ report_date }}
+
+---
+
+## 执行摘要
+
+| 指标 | 数值 |
+|------|------|
+| **执行状态** | {{ execution_summary.status | default('完成') }} |
+| **计划订单数** | {{ orders | length }} |
+| **成交订单数** | {{ execution_summary.filled_orders | default(0) }} |
+| **总成交金额** | ${{ execution_summary.total_value | default(0) | number }} |
+| **总手续费** | ${{ execution_summary.total_commission | default(0) | number }} |
+| **平均滑点** | {{ execution_summary.avg_slippage_bps | default(0) | number }} bps |
+| **执行时间** | {{ execution_summary.execution_time | default('N/A') }} |
+
+---
+
+## 订单明细
+
+{% if orders %}
+| 序号 | 交易对 | 方向 | 数量 | 委托价 | 成交价 | 滑点(bps) | 状态 | 时间 |
+|------|--------|------|------|--------|--------|-----------|------|------|
+{% for order in orders %}
+| {{ loop.index }} | {{ order.symbol }} | {{ order.side }} | {{ order.quantity | number(4) }} | ${{ order.price | default('-') | number }} | ${{ order.average_price | default('-') | number }} | {{ order.slippage_bps | default(0) | number }} | {{ order.status }} | {{ order.executed_at | datetime }} |
+{% endfor %}
+{% else %}
+*无订单记录*
+{% endif %}
+
+---
+
+## 持仓变化
+
+{% if positions %}
+| 资产 | 方向 | 数量 | 入场价 | 当前价 | 未实现盈亏 | 盈亏比例 |
+|------|------|------|--------|--------|------------|----------|
+{% for pos in positions %}
+| {{ pos.symbol }} | {{ pos.side }} | {{ pos.quantity | number(4) }} | ${{ pos.entry_price | number }} | ${{ pos.current_price | number }} | ${{ pos.unrealized_pnl | number }} | {{ pos.unrealized_pnl_pct | percent }} |
+{% endfor %}
+{% else %}
+*无持仓变化*
+{% endif %}
+
+---
+
+## 执行绩效
+
+### 成本分析
+
+| 成本类型 | 金额 | 占比 |
+|----------|------|------|
+| 手续费 | ${{ performance.commission | default(0) | number }} | {{ performance.commission_pct | default(0) | percent }} |
+| 滑点成本 | ${{ performance.slippage_cost | default(0) | number }} | {{ performance.slippage_pct | default(0) | percent }} |
+| 市场冲击 | ${{ performance.market_impact | default(0) | number }} | {{ performance.impact_pct | default(0) | percent }} |
+| **总成本** | **${{ performance.total_cost | default(0) | number }}** | **{{ performance.total_cost_pct | default(0) | percent }}** |
+
+### 执行质量
+
+| 指标 | 数值 | 基准 | 评价 |
+|------|------|------|------|
+| VWAP 偏差 | {{ performance.vwap_deviation | default(0) | percent }} | < 0.1% | {{ 'PASS' if (performance.vwap_deviation | default(0)) < 0.001 else 'REVIEW' }} |
+| 执行速度 | {{ performance.execution_speed | default('N/A') }} | < 5min | {{ 'PASS' if performance.speed_passed | default(true) else 'REVIEW' }} |
+| 填充率 | {{ performance.fill_rate | default(1) | percent }} | > 95% | {{ 'PASS' if (performance.fill_rate | default(1)) > 0.95 else 'REVIEW' }} |
+
+---
+
+## 风险监控
+
+{% if risk_alerts %}
+### 风险警报
+
+{% for alert in risk_alerts %}
+- **[{{ alert.level }}]** {{ alert.message }} ({{ alert.timestamp | datetime }})
+{% endfor %}
+{% else %}
+*执行期间无风险警报*
+{% endif %}
+
+---
+
+## 备注
+
+{{ notes | default('无') }}
+
+---
+
+**生成时间**: {{ generated_at }}

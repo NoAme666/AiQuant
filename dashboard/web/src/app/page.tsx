@@ -2,361 +2,350 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { 
-  Building2, 
-  GitBranch, 
-  FlaskConical, 
-  FileText, 
-  Users, 
-  MessageSquare,
+import {
+  TrendingUp,
+  TrendingDown,
+  Users,
+  FlaskConical,
+  FileText,
+  CheckSquare,
   Activity,
-  Wallet,
-  Star,
-  AlertTriangle
+  Zap,
+  Clock,
+  ArrowRight,
+  DollarSign,
+  AlertTriangle,
 } from 'lucide-react'
+import useSWR from 'swr'
 
-// 统计卡片组件
-function StatCard({ 
-  title, 
-  value, 
-  icon: Icon, 
-  trend, 
-  color = 'primary' 
-}: { 
+// Stats Card Component
+function StatCard({
+  title,
+  value,
+  change,
+  changeType,
+  icon: Icon,
+  suffix = '',
+}: {
   title: string
   value: string | number
+  change?: string
+  changeType?: 'positive' | 'negative' | 'neutral'
   icon: React.ElementType
-  trend?: { value: number; label: string }
-  color?: 'primary' | 'success' | 'warning' | 'danger'
+  suffix?: string
 }) {
-  const colorClasses = {
-    primary: 'text-accent-primary',
-    success: 'text-accent-success',
-    warning: 'text-accent-warning',
-    danger: 'text-accent-danger',
+  return (
+    <div className="stat-card">
+      <div className="flex items-center justify-between">
+        <span className="stat-label">{title}</span>
+        <Icon className="w-5 h-5 text-gray-500" />
+      </div>
+      <div className="stat-value number-highlight">
+        {value}{suffix}
+      </div>
+      {change && (
+        <div className={`stat-change ${changeType}`}>
+          {changeType === 'positive' && <TrendingUp className="w-3 h-3 inline mr-1" />}
+          {changeType === 'negative' && <TrendingDown className="w-3 h-3 inline mr-1" />}
+          {change}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Agent Status Component
+function AgentStatusList() {
+  const agents = [
+    { id: 'cio', name: 'CIO', status: 'active', task: '审核策略报告' },
+    { id: 'head_of_research', name: '研究总监', status: 'active', task: '分析市场数据' },
+    { id: 'cro', name: 'CRO', status: 'active', task: '风险评估' },
+    { id: 'head_trader', name: '交易主管', status: 'active', task: '监控持仓' },
+    { id: 'alpha_a_lead', name: 'Alpha A 组长', status: 'active', task: '因子研究' },
+    { id: 'skeptic', name: '质疑者', status: 'frozen', task: '- 暂停 -' },
+  ]
+
+  return (
+    <div className="space-y-2">
+      {agents.map((agent) => (
+        <Link
+          key={agent.id}
+          href={`/chat/${agent.id}`}
+          className="flex items-center gap-3 p-3 bg-terminal-muted/30 rounded-lg hover:bg-terminal-muted/50 transition-colors"
+        >
+          <span className={`status-dot ${agent.status}`}></span>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-medium text-gray-200">{agent.name}</div>
+            <div className="text-xs text-gray-500 truncate">{agent.task}</div>
+          </div>
+          <ArrowRight className="w-4 h-4 text-gray-500" />
+        </Link>
+      ))}
+    </div>
+  )
+}
+
+// Recent Activity Component
+function RecentActivity() {
+  const activities = [
+    { time: '14:32', agent: 'Alpha A 组长', action: '提交策略研究报告', type: 'research' },
+    { time: '14:28', agent: 'CRO', action: '审核通过 BTC/USDT 交易计划', type: 'approval' },
+    { time: '14:15', agent: '执行交易员', action: '完成订单执行', type: 'trade' },
+    { time: '13:50', agent: 'CGO', action: '发布合规检查报告', type: 'compliance' },
+    { time: '13:30', agent: '研究总监', action: '发起研究周期 #RC-2026-001', type: 'research' },
+  ]
+
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case 'research': return 'text-purple-400'
+      case 'approval': return 'text-accent-success'
+      case 'trade': return 'text-accent-primary'
+      case 'compliance': return 'text-orange-400'
+      default: return 'text-gray-400'
+    }
   }
 
   return (
-    <div className="card">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm text-gray-400">{title}</p>
-          <p className={`text-3xl font-bold mt-1 ${colorClasses[color]}`}>{value}</p>
-          {trend && (
-            <p className={`text-xs mt-1 ${trend.value >= 0 ? 'text-accent-success' : 'text-accent-danger'}`}>
-              {trend.value >= 0 ? '↑' : '↓'} {Math.abs(trend.value)}% {trend.label}
-            </p>
-          )}
+    <div className="space-y-3">
+      {activities.map((activity, idx) => (
+        <div key={idx} className="flex items-start gap-3 text-sm">
+          <span className="text-xs text-gray-500 font-mono w-12">{activity.time}</span>
+          <div>
+            <span className="text-gray-300">{activity.agent}</span>
+            <span className="text-gray-500 mx-1">·</span>
+            <span className={getTypeColor(activity.type)}>{activity.action}</span>
+          </div>
         </div>
-        <div className={`p-3 rounded-lg bg-terminal-muted ${colorClasses[color]}`}>
-          <Icon className="w-6 h-6" />
-        </div>
-      </div>
+      ))}
     </div>
   )
 }
 
-// 快捷入口卡片
-function QuickAccessCard({ 
-  title, 
-  description, 
-  href, 
-  icon: Icon 
-}: { 
-  title: string
-  description: string
-  href: string
-  icon: React.ElementType
-}) {
-  return (
-    <Link href={href} className="card-hover group">
-      <div className="flex items-center gap-4">
-        <div className="p-3 rounded-lg bg-terminal-muted group-hover:bg-accent-primary/20 transition-colors">
-          <Icon className="w-6 h-6 text-accent-primary" />
-        </div>
-        <div>
-          <h3 className="font-medium text-gray-100">{title}</h3>
-          <p className="text-sm text-gray-400">{description}</p>
-        </div>
-      </div>
-    </Link>
-  )
-}
+// Pending Approvals Component
+function PendingApprovals() {
+  const approvals = [
+    { id: '1', title: 'BTC/USDT 交易计划', type: 'trading', urgency: 'high', from: '交易主管' },
+    { id: '2', title: '新增研究员招聘提案', type: 'hiring', urgency: 'normal', from: 'CPO' },
+    { id: '3', title: '策略 MeanRev_v2 上线', type: 'strategy', urgency: 'normal', from: 'CIO' },
+  ]
 
-// 活动流项目
-function ActivityItem({ 
-  actor, 
-  action, 
-  target, 
-  time 
-}: { 
-  actor: string
-  action: string
-  target: string
-  time: string
-}) {
   return (
-    <div className="flex items-start gap-3 py-3 border-b border-terminal-border last:border-0">
-      <div className="w-8 h-8 rounded-full bg-terminal-muted flex items-center justify-center text-xs font-medium text-accent-primary">
-        {actor.slice(0, 2).toUpperCase()}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm">
-          <span className="font-medium text-gray-100">{actor}</span>
-          <span className="text-gray-400"> {action} </span>
-          <span className="text-accent-primary">{target}</span>
-        </p>
-        <p className="text-xs text-gray-500 mt-0.5">{time}</p>
-      </div>
+    <div className="space-y-3">
+      {approvals.map((item) => (
+        <div
+          key={item.id}
+          className="p-3 bg-terminal-muted/30 rounded-lg border-l-2 border-accent-warning hover:bg-terminal-muted/50 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-200">{item.title}</span>
+            {item.urgency === 'high' && (
+              <span className="badge badge-danger text-[10px]">紧急</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+            <span>来自 {item.from}</span>
+            <span>·</span>
+            <span className="text-accent-warning">{item.type}</span>
+          </div>
+        </div>
+      ))}
+      <Link href="/approvals" className="block text-center text-sm text-accent-primary hover:underline">
+        查看全部待审批 →
+      </Link>
     </div>
   )
 }
 
-// 待处理事项
-function PendingItem({ 
-  title, 
-  type, 
-  priority 
-}: { 
-  title: string
-  type: string
-  priority: 'high' | 'medium' | 'low'
-}) {
-  const priorityColors = {
-    high: 'badge-danger',
-    medium: 'badge-warning',
-    low: 'badge-info',
+// Research Cycles Component
+function ResearchCycles() {
+  const cycles = [
+    { id: 'RC-001', name: 'BTC 动量策略', stage: 'RISK_REVIEW', progress: 70 },
+    { id: 'RC-002', name: 'ETH 均值回归', stage: 'BACKTEST', progress: 45 },
+    { id: 'RC-003', name: '跨市场套利', stage: 'DATA_GATE', progress: 20 },
+  ]
+
+  const getStageColor = (stage: string) => {
+    const colors: Record<string, string> = {
+      'DATA_GATE': 'bg-blue-500',
+      'BACKTEST': 'bg-purple-500',
+      'RISK_REVIEW': 'bg-orange-500',
+      'IC_REVIEW': 'bg-yellow-500',
+      'BOARD': 'bg-accent-primary',
+    }
+    return colors[stage] || 'bg-gray-500'
   }
 
   return (
-    <div className="flex items-center justify-between py-2 border-b border-terminal-border last:border-0">
-      <div className="flex items-center gap-3">
-        <AlertTriangle className={`w-4 h-4 ${
-          priority === 'high' ? 'text-accent-danger' : 
-          priority === 'medium' ? 'text-accent-warning' : 
-          'text-gray-400'
-        }`} />
-        <span className="text-sm">{title}</span>
-      </div>
-      <span className={priorityColors[priority]}>{type}</span>
+    <div className="space-y-4">
+      {cycles.map((cycle) => (
+        <div key={cycle.id} className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-sm text-gray-200">{cycle.name}</span>
+              <span className="text-xs text-gray-500 ml-2">{cycle.id}</span>
+            </div>
+            <span className="badge badge-neutral text-[10px]">{cycle.stage}</span>
+          </div>
+          <div className="h-1.5 bg-terminal-muted rounded-full overflow-hidden">
+            <div
+              className={`h-full ${getStageColor(cycle.stage)} transition-all`}
+              style={{ width: `${cycle.progress}%` }}
+            />
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
 
-export default function LobbyPage() {
-  const [stats, setStats] = useState({
-    activeCycles: 0,
-    pendingApprovals: 0,
-    totalExperiments: 0,
-    totalAgents: 0,
-    budgetUtilization: 0,
-    avgReputation: 0,
-  })
-
-  useEffect(() => {
-    // 模拟数据加载
-    setStats({
-      activeCycles: 3,
-      pendingApprovals: 5,
-      totalExperiments: 127,
-      totalAgents: 18,
-      budgetUtilization: 0.65,
-      avgReputation: 0.72,
-    })
-  }, [])
-
+export default function DashboardPage() {
   return (
-    <div className="min-h-screen p-6">
-      {/* 顶部导航 */}
-      <header className="flex items-center justify-between mb-8">
+    <div className="space-y-6 animate-slide-in">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-100">AI Quant Company</h1>
-          <p className="text-gray-400">董事长办公室 Dashboard</p>
+          <h1 className="page-title">控制中心</h1>
+          <p className="page-subtitle">AI Quant Company · 董事长仪表盘</p>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-2 text-sm text-gray-400">
-            <span className="status-dot active"></span>
-            系统运行中
-          </span>
-          <button className="btn-secondary">
-            <MessageSquare className="w-4 h-4 mr-2 inline" />
-            消息
+        <div className="flex items-center gap-3">
+          <button className="btn btn-secondary btn-sm">
+            <FileText className="w-4 h-4 mr-2" />
+            生成周报
+          </button>
+          <button className="btn btn-primary btn-sm">
+            <Zap className="w-4 h-4 mr-2" />
+            启动研究周期
           </button>
         </div>
-      </header>
+      </div>
 
-      {/* 统计卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard 
-          title="活跃研究周期" 
-          value={stats.activeCycles} 
-          icon={GitBranch}
-          color="primary"
+      {/* Stats Row */}
+      <div className="grid grid-cols-5 gap-4">
+        <StatCard
+          title="活跃 Agent"
+          value="18"
+          change="2 新增本周"
+          changeType="positive"
+          icon={Users}
         />
-        <StatCard 
-          title="待审批事项" 
-          value={stats.pendingApprovals} 
-          icon={AlertTriangle}
-          color="warning"
-        />
-        <StatCard 
-          title="总实验数" 
-          value={stats.totalExperiments} 
+        <StatCard
+          title="研究周期"
+          value="5"
+          change="3 进行中"
+          changeType="neutral"
           icon={FlaskConical}
-          color="success"
         />
-        <StatCard 
-          title="预算使用率" 
-          value={`${(stats.budgetUtilization * 100).toFixed(0)}%`} 
-          icon={Wallet}
-          trend={{ value: 5, label: '本周' }}
-          color="primary"
+        <StatCard
+          title="待审批"
+          value="3"
+          change="1 紧急"
+          changeType="negative"
+          icon={CheckSquare}
+        />
+        <StatCard
+          title="本周收益"
+          value="+2.4"
+          suffix="%"
+          change="+$1,240"
+          changeType="positive"
+          icon={DollarSign}
+        />
+        <StatCard
+          title="风险指数"
+          value="32"
+          change="低风险"
+          changeType="positive"
+          icon={Activity}
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 左侧：快捷入口 */}
-        <div className="lg:col-span-2 space-y-4">
-          <h2 className="text-lg font-semibold text-gray-100 mb-4">快捷入口</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <QuickAccessCard 
-              title="组织架构" 
-              description="查看各部门与 Agent 状态" 
-              href="/org-chart"
-              icon={Building2}
-            />
-            <QuickAccessCard 
-              title="研究流水线" 
-              description="跟踪策略研究进度" 
-              href="/pipeline"
-              icon={GitBranch}
-            />
-            <QuickAccessCard 
-              title="实验库" 
-              description="查看所有回测实验" 
-              href="/experiments"
-              icon={FlaskConical}
-            />
-            <QuickAccessCard 
-              title="报告中心" 
-              description="董事会报告与研究报告" 
-              href="/reports"
-              icon={FileText}
-            />
-            <QuickAccessCard 
-              title="会议中心" 
-              description="会议申请与审批" 
-              href="/meetings"
-              icon={Users}
-            />
-            <QuickAccessCard 
-              title="风险监控" 
-              description="实时风险指标与告警" 
-              href="/risk"
-              icon={Activity}
-            />
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-3 gap-6">
+        {/* Left Column - Agent Status */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-100">Agent 状态</h2>
+            <Link href="/org" className="text-xs text-accent-primary hover:underline">
+              查看全部
+            </Link>
           </div>
-
-          {/* 最近活动 */}
-          <div className="card mt-6">
-            <h3 className="font-medium text-gray-100 mb-4">最近活动</h3>
-            <div className="space-y-1">
-              <ActivityItem 
-                actor="Alpha A Lead"
-                action="提交了策略到"
-                target="ROBUSTNESS_GATE"
-                time="5 分钟前"
-              />
-              <ActivityItem 
-                actor="CRO"
-                action="批准了会议申请"
-                target="策略评审会议"
-                time="15 分钟前"
-              />
-              <ActivityItem 
-                actor="Data Auditor"
-                action="完成数据审核"
-                target="BTC 动量策略"
-                time="1 小时前"
-              />
-              <ActivityItem 
-                actor="Skeptic"
-                action="要求补充实验"
-                target="ETH 均值回归"
-                time="2 小时前"
-              />
-            </div>
-          </div>
+          <AgentStatusList />
         </div>
 
-        {/* 右侧：待处理事项 & 声誉排行 */}
+        {/* Middle Column - Activity & Research */}
         <div className="space-y-6">
-          {/* 待处理事项 */}
-          <div className="card">
-            <h3 className="font-medium text-gray-100 mb-4 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-accent-warning" />
-              待处理事项
-            </h3>
-            <div className="space-y-1">
-              <PendingItem 
-                title="BTC 策略待董事会决策"
-                type="决策"
-                priority="high"
-              />
-              <PendingItem 
-                title="Alpha B 会议待审批"
-                type="会议"
-                priority="medium"
-              />
-              <PendingItem 
-                title="风控报告待阅读"
-                type="报告"
-                priority="low"
-              />
+          {/* Pending Approvals */}
+          <div className="card border-l-2 border-accent-warning">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertTriangle className="w-5 h-5 text-accent-warning" />
+              <h2 className="text-lg font-semibold text-gray-100">待您审批</h2>
             </div>
-            <Link href="/approvals" className="block text-center text-sm text-accent-primary mt-4 hover:underline">
-              查看全部 →
-            </Link>
+            <PendingApprovals />
           </div>
 
-          {/* 声誉排行 */}
+          {/* Research Progress */}
           <div className="card">
-            <h3 className="font-medium text-gray-100 mb-4 flex items-center gap-2">
-              <Star className="w-4 h-4 text-accent-primary" />
-              声誉排行
-            </h3>
-            <div className="space-y-3">
-              {[
-                { name: 'Alpha A Lead', score: 0.85, trend: 'up' },
-                { name: 'CRO', score: 0.82, trend: 'stable' },
-                { name: 'Data Auditor', score: 0.78, trend: 'up' },
-                { name: 'Backtest Lead', score: 0.75, trend: 'down' },
-              ].map((agent, i) => (
-                <div key={agent.name} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="w-6 h-6 rounded-full bg-terminal-muted flex items-center justify-center text-xs font-bold text-accent-primary">
-                      {i + 1}
-                    </span>
-                    <span className="text-sm">{agent.name}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">{(agent.score * 100).toFixed(0)}%</span>
-                    <span className={`text-xs ${
-                      agent.trend === 'up' ? 'text-accent-success' : 
-                      agent.trend === 'down' ? 'text-accent-danger' : 
-                      'text-gray-400'
-                    }`}>
-                      {agent.trend === 'up' ? '↑' : agent.trend === 'down' ? '↓' : '—'}
-                    </span>
-                  </div>
-                </div>
-              ))}
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-100">研究进度</h2>
+              <Link href="/research" className="text-xs text-accent-primary hover:underline">
+                研究中心
+              </Link>
             </div>
-            <Link href="/reputation" className="block text-center text-sm text-accent-primary mt-4 hover:underline">
-              查看详情 →
-            </Link>
+            <ResearchCycles />
           </div>
         </div>
+
+        {/* Right Column - Activity Feed */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-100">实时动态</h2>
+            <span className="flex items-center gap-1 text-xs text-accent-success">
+              <span className="status-dot active"></span>
+              Live
+            </span>
+          </div>
+          <RecentActivity />
+        </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-4 gap-4">
+        <Link href="/chat/cio" className="card-hover flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+            <Users className="w-5 h-5 text-purple-400" />
+          </div>
+          <div>
+            <div className="text-sm font-medium text-gray-200">与 CIO 对话</div>
+            <div className="text-xs text-gray-500">投资策略讨论</div>
+          </div>
+        </Link>
+        <Link href="/trading" className="card-hover flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-accent-primary/20 flex items-center justify-center">
+            <TrendingUp className="w-5 h-5 text-accent-primary" />
+          </div>
+          <div>
+            <div className="text-sm font-medium text-gray-200">交易台</div>
+            <div className="text-xs text-gray-500">持仓与执行</div>
+          </div>
+        </Link>
+        <Link href="/reports" className="card-hover flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+            <FileText className="w-5 h-5 text-blue-400" />
+          </div>
+          <div>
+            <div className="text-sm font-medium text-gray-200">报告中心</div>
+            <div className="text-xs text-gray-500">查看所有报告</div>
+          </div>
+        </Link>
+        <Link href="/meetings" className="card-hover flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+            <Clock className="w-5 h-5 text-orange-400" />
+          </div>
+          <div>
+            <div className="text-sm font-medium text-gray-200">会议室</div>
+            <div className="text-xs text-gray-500">查看会议记录</div>
+          </div>
+        </Link>
       </div>
     </div>
   )
