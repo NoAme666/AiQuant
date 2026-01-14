@@ -1,0 +1,30 @@
+{
+  "approvals": [
+    {
+      "title": "新增情绪分析工具",
+      "type": "tool",
+      "urgency": "normal",
+      "requester": "Alpha A 组长",
+      "requester_id": "alpha_a_lead",
+      "responsible": "量化开发",
+      "responsible_id": "quant_dev",
+      "description": "请求授权开发新工具",
+      "id": "APR-002",
+      "created_at": "2026-01-14T18:17:09.060913",
+      "status": "pending"
+    },
+    {
+      "title": "BTC 动量策略执行计划",
+      "type": "trading",
+      "urgency": "high",
+      "requester": "交易主管",
+      "requester_id": "head_trader",
+      "responsible": "CRO",
+      "responsible_id": "cro",
+      "description": "请求批准执行 BTC 动量策略",
+      "id": "APR-001",
+      "created_at": "2026-01-14T18:17:09.060812",
+      "status": "pending"
+    }
+  ]
+}

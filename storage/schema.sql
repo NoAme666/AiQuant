@@ -1620,6 +1620,104 @@ CREATE TRIGGER research_cycles_state_log
     FOR EACH ROW EXECUTE FUNCTION log_cycle_state_change();
 
 -- ============================================
+-- LLM 使用追踪
+-- ============================================
+
+-- LLM 调用记录表
+CREATE TABLE llm_usage (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    
+    -- 调用者
+    agent_id VARCHAR(64) REFERENCES agents(id),
+    
+    -- 模型信息
+    model VARCHAR(64) NOT NULL,
+    provider VARCHAR(32) DEFAULT 'antigravity',
+    
+    -- Token 使用
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    total_tokens INTEGER GENERATED ALWAYS AS (input_tokens + output_tokens) STORED,
+    
+    -- 成本计算 (USD, 精确到小数点后 6 位)
+    input_cost DECIMAL(12, 6) DEFAULT 0,
+    output_cost DECIMAL(12, 6) DEFAULT 0,
+    total_cost DECIMAL(12, 6) GENERATED ALWAYS AS (input_cost + output_cost) STORED,
+    
+    -- 调用详情
+    thinking_enabled BOOLEAN DEFAULT FALSE,
+    request_type VARCHAR(32),  -- 'think', 'review', 'report', 'meeting', etc.
+    
+    -- 时间
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    latency_ms INTEGER,  -- 响应延迟（毫秒）
+    
+    -- 关联
+    tool_call_id UUID REFERENCES tool_calls(id),
+    meeting_id UUID REFERENCES meeting_requests(id)
+);
+
+-- 索引
+CREATE INDEX idx_llm_usage_agent ON llm_usage(agent_id);
+CREATE INDEX idx_llm_usage_model ON llm_usage(model);
+CREATE INDEX idx_llm_usage_created ON llm_usage(created_at DESC);
+CREATE INDEX idx_llm_usage_date ON llm_usage(DATE(created_at));
+
+-- 每日汇总视图
+CREATE VIEW llm_usage_daily AS
+SELECT 
+    DATE(created_at) as date,
+    model,
+    COUNT(*) as total_calls,
+    SUM(input_tokens) as total_input_tokens,
+    SUM(output_tokens) as total_output_tokens,
+    SUM(total_tokens) as total_tokens,
+    SUM(total_cost) as total_cost_usd,
+    AVG(latency_ms) as avg_latency_ms
+FROM llm_usage
+GROUP BY DATE(created_at), model
+ORDER BY date DESC, model;
+
+-- 每个 Agent 汇总视图
+CREATE VIEW llm_usage_by_agent AS
+SELECT 
+    agent_id,
+    COUNT(*) as total_calls,
+    SUM(input_tokens) as total_input_tokens,
+    SUM(output_tokens) as total_output_tokens,
+    SUM(total_cost) as total_cost_usd,
+    SUM(CASE WHEN thinking_enabled THEN 1 ELSE 0 END) as thinking_calls
+FROM llm_usage
+WHERE created_at > NOW() - INTERVAL '30 days'
+GROUP BY agent_id
+ORDER BY total_cost_usd DESC;
+
+-- LLM 价格配置表
+CREATE TABLE llm_pricing (
+    id SERIAL PRIMARY KEY,
+    model VARCHAR(64) NOT NULL UNIQUE,
+    provider VARCHAR(32) NOT NULL,
+    input_price_per_million DECIMAL(10, 4) NOT NULL,  -- $/M tokens
+    output_price_per_million DECIMAL(10, 4) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 初始化价格数据 (2026年1月)
+INSERT INTO llm_pricing (model, provider, input_price_per_million, output_price_per_million) VALUES
+    ('gpt-4o', 'openai', 2.50, 10.00),
+    ('gpt-4o-mini', 'openai', 0.15, 0.60),
+    ('claude-4.5-opus', 'anthropic', 5.00, 25.00),
+    ('claude-4.5-sonnet', 'anthropic', 3.00, 15.00),
+    ('claude-3.5-haiku', 'anthropic', 0.80, 4.00),
+    ('deepseek-v3', 'deepseek', 0.27, 1.10),
+    ('antigravity', 'antigravity', 1.00, 3.00)
+ON CONFLICT (model) DO UPDATE SET
+    input_price_per_million = EXCLUDED.input_price_per_million,
+    output_price_per_million = EXCLUDED.output_price_per_million,
+    updated_at = NOW();
+
+-- ============================================
 -- 初始数据（可选）
 -- ============================================
 

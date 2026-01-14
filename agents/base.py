@@ -116,6 +116,7 @@ class AgentConfig:
     reports_to: Optional[str] = None
     veto_power: bool = False
     can_force_retest: bool = False
+    thinking_enabled: bool = False  # 是否启用深度思考模式
     
     # 人设
     persona_style: str = ""
@@ -138,6 +139,7 @@ class AgentConfig:
             reports_to=data.get("reports_to"),
             veto_power=data.get("veto_power", False),
             can_force_retest=data.get("can_force_retest", False),
+            thinking_enabled=data.get("thinking_enabled", False),
             persona_style=persona.get("style", ""),
             persona_traits=persona.get("traits", []),
             persona_tone=persona.get("tone", "professional"),
@@ -159,8 +161,17 @@ class LLMClient(ABC):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        thinking_enabled: bool = False,
     ) -> str:
-        """生成回复"""
+        """生成回复
+        
+        Args:
+            messages: 消息列表
+            model: 使用的模型
+            temperature: 温度参数
+            max_tokens: 最大生成 token 数
+            thinking_enabled: 是否启用深度思考模式
+        """
         pass
     
     @abstractmethod
@@ -194,7 +205,10 @@ class MockLLMClient(LLMClient):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        thinking_enabled: bool = False,
     ) -> str:
+        if thinking_enabled:
+            return "[Mock Response with Thinking] 经过深度思考分析...\n\n这是一个模拟的深度思考回复。"
         return "[Mock Response] This is a simulated response."
     
     async def complete_with_tools(
@@ -230,6 +244,8 @@ class AntigravityLLMClient(LLMClient):
         default_model: str = "gpt-4o",
         embedding_model: str = "text-embedding-3-small",
         timeout: float = 120.0,
+        report_usage: bool = True,
+        dashboard_url: Optional[str] = None,
     ):
         """初始化 Antigravity 客户端
         
@@ -239,12 +255,19 @@ class AntigravityLLMClient(LLMClient):
             default_model: 默认使用的模型
             embedding_model: 默认的嵌入模型
             timeout: 请求超时时间（秒）
+            report_usage: 是否报告 token 使用到 dashboard
+            dashboard_url: Dashboard API URL
         """
         self.api_key = api_key or os.getenv("ANTIGRAVITY_API_KEY")
         self.base_url = base_url or os.getenv("ANTIGRAVITY_BASE_URL")
         self.default_model = default_model
         self.embedding_model = embedding_model or os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
         self.timeout = timeout
+        self.report_usage = report_usage
+        self.dashboard_url = dashboard_url or os.getenv("DASHBOARD_API_URL", "http://localhost:8000")
+        
+        # 当前 agent_id（会被 BaseAgent 设置）
+        self.current_agent_id: Optional[str] = None
         
         if not self.api_key:
             raise ValueError("ANTIGRAVITY_API_KEY is required")
@@ -254,12 +277,48 @@ class AntigravityLLMClient(LLMClient):
         # 延迟导入 openai 库
         self._client = None
         self._async_client = None
+        self._http_client = None
         
         logger.info(
             "Antigravity LLM Client 初始化",
             base_url=self.base_url,
             default_model=self.default_model,
+            report_usage=report_usage,
         )
+    
+    async def _report_token_usage(
+        self,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        thinking_enabled: bool = False,
+        request_type: str = "think",
+        latency_ms: int = 0,
+    ):
+        """报告 token 使用到 dashboard"""
+        if not self.report_usage:
+            return
+        
+        try:
+            import aiohttp
+            if self._http_client is None:
+                self._http_client = aiohttp.ClientSession()
+            
+            await self._http_client.post(
+                f"{self.dashboard_url}/api/system/record-tokens",
+                json={
+                    "agent_id": self.current_agent_id,
+                    "model": model,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "thinking_enabled": thinking_enabled,
+                    "request_type": request_type,
+                    "latency_ms": latency_ms,
+                },
+                timeout=aiohttp.ClientTimeout(total=5),
+            )
+        except Exception as e:
+            logger.debug(f"报告 token 使用失败: {e}")
     
     def _get_client(self):
         """获取同步 OpenAI 客户端"""
@@ -289,6 +348,7 @@ class AntigravityLLMClient(LLMClient):
         model: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        thinking_enabled: bool = False,
     ) -> str:
         """生成回复
         
@@ -297,12 +357,42 @@ class AntigravityLLMClient(LLMClient):
             model: 使用的模型
             temperature: 温度参数
             max_tokens: 最大生成 token 数
+            thinking_enabled: 是否启用深度思考模式
             
         Returns:
             生成的回复文本
         """
         client = self._get_async_client()
         model = model or self.default_model
+        
+        # 如果启用 thinking 模式，注入深度思考指令
+        if thinking_enabled:
+            thinking_instruction = """
+在回答之前，请先进行深度思考：
+
+<thinking>
+1. 问题分析：这个问题的核心是什么？有哪些关键要素？
+2. 多角度考量：从不同利益相关方的角度思考
+3. 风险评估：有哪些潜在风险和边界条件？
+4. 逻辑推理：我的推理链条是否完整、有无漏洞？
+5. 反向验证：如果我的结论是错的，最可能是哪里出了问题？
+</thinking>
+
+请先在 <thinking> 标签中展示你的思考过程，然后给出最终回答。
+深度思考对于这类问题尤为重要，请确保推理充分。
+"""
+            # 在用户消息前插入思考指令
+            messages = messages.copy()
+            if messages and messages[-1]["role"] == "user":
+                messages[-1]["content"] = thinking_instruction + "\n\n" + messages[-1]["content"]
+            
+            # 使用更低的温度确保推理更严谨
+            temperature = min(temperature, 0.5)
+            # 增加 token 限制以容纳思考过程
+            max_tokens = max(max_tokens, 8192)
+        
+        import time
+        start_time = time.time()
         
         try:
             response = await client.chat.completions.create(
@@ -312,14 +402,31 @@ class AntigravityLLMClient(LLMClient):
                 max_tokens=max_tokens,
             )
             
+            latency_ms = int((time.time() - start_time) * 1000)
             result = response.choices[0].message.content or ""
+            
+            # 获取 token 使用量
+            usage = response.usage
+            input_tokens = usage.prompt_tokens if usage else 0
+            output_tokens = usage.completion_tokens if usage else 0
             
             logger.debug(
                 "LLM 请求完成",
                 model=model,
-                input_messages=len(messages),
-                output_length=len(result),
-                usage=response.usage.model_dump() if response.usage else None,
+                thinking_enabled=thinking_enabled,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                latency_ms=latency_ms,
+            )
+            
+            # 报告 token 使用
+            await self._report_token_usage(
+                model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                thinking_enabled=thinking_enabled,
+                request_type="think",
+                latency_ms=latency_ms,
             )
             
             return result
@@ -686,12 +793,18 @@ class BaseAgent(ABC):
         
         return "\n".join(parts)
     
-    async def think(self, prompt: str, context: Optional[dict] = None) -> str:
+    async def think(
+        self, 
+        prompt: str, 
+        context: Optional[dict] = None,
+        force_thinking: Optional[bool] = None,
+    ) -> str:
         """思考并生成回复
         
         Args:
             prompt: 输入提示
             context: 上下文信息
+            force_thinking: 强制启用/禁用深度思考（默认使用配置）
             
         Returns:
             生成的回复
@@ -708,11 +821,18 @@ class BaseAgent(ABC):
                 "content": f"上下文信息:\n```yaml\n{context_str}\n```",
             })
         
-        response = await self.llm_client.complete(messages)
+        # 确定是否启用深度思考
+        thinking_enabled = force_thinking if force_thinking is not None else self.config.thinking_enabled
+        
+        response = await self.llm_client.complete(
+            messages, 
+            thinking_enabled=thinking_enabled,
+        )
         
         logger.info(
             "Agent 思考",
             agent_id=self.agent_id,
+            thinking_enabled=thinking_enabled,
             prompt_length=len(prompt),
             response_length=len(response),
         )
@@ -873,6 +993,7 @@ class BaseAgent(ABC):
             "department": self.config.department,
             "is_lead": self.config.is_lead,
             "capability_tier": self.config.capability_tier.value,
+            "thinking_enabled": self.config.thinking_enabled,
             "status": self.status.value,
             "budget_remaining": self.budget_remaining,
             "reputation_score": self.reputation_score,

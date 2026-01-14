@@ -125,19 +125,19 @@ export default function MarketTicker() {
   )
 }
 
-// 静态行情列表（非滚动）
+// 静态行情列表（非滚动）- 主要币种
 export function MarketTickerStatic() {
   const { data, error, isLoading } = useSWR(
     `${API_BASE}/api/market/tickers`,
     fetcher,
-    { refreshInterval: 10000 }
+    { refreshInterval: 3000 }  // 更快刷新
   )
   
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+      <div className="space-y-2">
         {[1, 2, 3, 4, 5, 6].map(i => (
-          <div key={i} className="animate-pulse bg-terminal-muted rounded-lg h-20" />
+          <div key={i} className="animate-pulse bg-terminal-muted rounded-lg h-14" />
         ))}
       </div>
     )
@@ -147,30 +147,45 @@ export function MarketTickerStatic() {
     return <div className="text-accent-danger text-sm">行情加载失败</div>
   }
   
-  const tickers: TickerData[] = (data?.tickers || []).slice(0, 12)
+  // 只显示主要币种，避免太拥挤
+  const mainSymbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT', 'DOGE/USDT']
+  const allTickers: TickerData[] = data?.tickers || []
+  const tickers = mainSymbols
+    .map(s => allTickers.find(t => t.symbol === s))
+    .filter(Boolean) as TickerData[]
+  
+  // 如果没有找到主要币种，显示前6个
+  const displayTickers = tickers.length > 0 ? tickers : allTickers.slice(0, 6)
   
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
-      {tickers.map(ticker => (
+    <div className="space-y-2">
+      {displayTickers.map(ticker => (
         <div 
           key={ticker.symbol}
-          className="bg-terminal-card border border-terminal-border rounded-lg p-3 hover:border-accent-primary/50 transition-colors"
+          className="flex items-center justify-between p-2.5 bg-terminal-muted/30 rounded-lg hover:bg-terminal-muted/50 transition-colors"
         >
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-mono font-semibold text-sm text-gray-100">
-              {ticker.symbol.replace('/USDT', '')}
-            </span>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-accent-primary/20 flex items-center justify-center text-xs font-bold text-accent-primary">
+              {ticker.symbol.replace('/USDT', '').slice(0, 2)}
+            </div>
+            <div>
+              <span className="font-mono font-medium text-sm text-gray-100">
+                {ticker.symbol.replace('/USDT', '')}
+              </span>
+              <div className="text-[10px] text-gray-500">
+                Vol: {formatVolume(ticker.volume_24h || 0)}
+              </div>
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="font-mono text-sm font-bold text-gray-100">
+              ${formatPrice(ticker.last)}
+            </div>
             <span className={`text-xs font-mono ${
               (ticker.change_24h || 0) >= 0 ? 'text-accent-success' : 'text-accent-danger'
             }`}>
               {(ticker.change_24h || 0) >= 0 ? '+' : ''}{(ticker.change_24h || 0).toFixed(2)}%
             </span>
-          </div>
-          <div className="font-mono text-lg font-bold text-gray-100">
-            ${formatPrice(ticker.last)}
-          </div>
-          <div className="text-xs text-gray-500 mt-1">
-            Vol: {formatVolume(ticker.volume_24h || 0)}
           </div>
         </div>
       ))}

@@ -15,8 +15,16 @@ import {
   ArrowRight,
   DollarSign,
   AlertTriangle,
+  Building2,
+  Brain,
+  Target,
+  MessageSquare,
+  Shield,
 } from 'lucide-react'
 import useSWR from 'swr'
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const fetcher = (url: string) => fetch(url).then(res => res.json()).catch(() => null)
 
 // Stats Card Component
 function StatCard({
@@ -54,153 +62,152 @@ function StatCard({
   )
 }
 
-// Agent Status Component
-function AgentStatusList() {
-  const agents = [
-    { id: 'cio', name: 'CIO', status: 'active', task: '审核策略报告' },
-    { id: 'head_of_research', name: '研究总监', status: 'active', task: '分析市场数据' },
-    { id: 'cro', name: 'CRO', status: 'active', task: '风险评估' },
-    { id: 'head_trader', name: '交易主管', status: 'active', task: '监控持仓' },
-    { id: 'alpha_a_lead', name: 'Alpha A 组长', status: 'active', task: '因子研究' },
-    { id: 'skeptic', name: '质疑者', status: 'frozen', task: '- 暂停 -' },
-  ]
-
+// 部门卡片
+function DepartmentCard({
+  name,
+  nameEn,
+  agentCount,
+  activeCount,
+  icon: Icon,
+  color,
+  href,
+}: {
+  name: string
+  nameEn: string
+  agentCount: number
+  activeCount: number
+  icon: React.ElementType
+  color: string
+  href: string
+}) {
   return (
-    <div className="space-y-2">
-      {agents.map((agent) => (
-        <Link
-          key={agent.id}
-          href={`/chat/${agent.id}`}
-          className="flex items-center gap-3 p-3 bg-terminal-muted/30 rounded-lg hover:bg-terminal-muted/50 transition-colors"
-        >
-          <span className={`status-dot ${agent.status}`}></span>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-gray-200">{agent.name}</div>
-            <div className="text-xs text-gray-500 truncate">{agent.task}</div>
-          </div>
-          <ArrowRight className="w-4 h-4 text-gray-500" />
-        </Link>
-      ))}
+    <Link href={href} className="card-hover p-4">
+      <div className="flex items-start justify-between mb-3">
+        <div className={`w-10 h-10 rounded-lg ${color} flex items-center justify-center`}>
+          <Icon className="w-5 h-5 text-white" />
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="status-dot active"></span>
+          <span className="text-xs text-gray-500">{activeCount}/{agentCount}</span>
+        </div>
+      </div>
+      <h3 className="text-base font-medium text-gray-100">{name}</h3>
+      <p className="text-xs text-gray-500">{nameEn}</p>
+    </Link>
+  )
+}
+
+// 待审批项
+function ApprovalItem({ item }: { item: any }) {
+  return (
+    <div className="p-3 bg-terminal-muted/30 rounded-lg border-l-2 border-accent-warning hover:bg-terminal-muted/50 transition-colors cursor-pointer">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-sm font-medium text-gray-200 truncate flex-1 mr-2">{item.title}</span>
+        {item.urgency === 'high' && (
+          <span className="badge badge-danger text-[10px] shrink-0">紧急</span>
+        )}
+      </div>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          <span>来自 {item.from}</span>
+          <span className="text-accent-warning">{item.type}</span>
+        </div>
+        <span className="text-xs text-gray-400 font-medium">{item.owner || 'CIO'} 负责</span>
+      </div>
     </div>
   )
 }
 
-// Recent Activity Component
-function RecentActivity() {
-  const activities = [
-    { time: '14:32', agent: 'Alpha A 组长', action: '提交策略研究报告', type: 'research' },
-    { time: '14:28', agent: 'CRO', action: '审核通过 BTC/USDT 交易计划', type: 'approval' },
-    { time: '14:15', agent: '执行交易员', action: '完成订单执行', type: 'trade' },
-    { time: '13:50', agent: 'CGO', action: '发布合规检查报告', type: 'compliance' },
-    { time: '13:30', agent: '研究总监', action: '发起研究周期 #RC-2026-001', type: 'research' },
-  ]
-
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case 'research': return 'text-purple-400'
-      case 'approval': return 'text-accent-success'
-      case 'trade': return 'text-accent-primary'
-      case 'compliance': return 'text-orange-400'
-      default: return 'text-gray-400'
-    }
-  }
-
+// Agent 活动卡片
+function AgentActivityCard({ agent }: { agent: any }) {
+  const statusDot = agent.status === 'active' ? 'active' : 
+                    agent.status === 'off' ? 'bg-gray-600' : 'idle'
+  const isOff = agent.status === 'off'
+  
   return (
-    <div className="space-y-3">
-      {activities.map((activity, idx) => (
-        <div key={idx} className="flex items-start gap-3 text-sm">
-          <span className="text-xs text-gray-500 font-mono w-12">{activity.time}</span>
-          <div>
-            <span className="text-gray-300">{activity.agent}</span>
-            <span className="text-gray-500 mx-1">·</span>
-            <span className={getTypeColor(activity.type)}>{activity.action}</span>
-          </div>
+    <Link
+      href={`/chat/${agent.id}`}
+      className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+        isOff ? 'bg-terminal-muted/10 opacity-60' : 'bg-terminal-muted/30 hover:bg-terminal-muted/50'
+      }`}
+    >
+      <span className={`w-2 h-2 rounded-full ${
+        agent.status === 'active' ? 'bg-accent-success' :
+        agent.status === 'off' ? 'bg-gray-600' : 'bg-gray-400'
+      }`}></span>
+      <div className="flex-1 min-w-0">
+        <div className={`text-sm font-medium ${isOff ? 'text-gray-400' : 'text-gray-200'}`}>{agent.name}</div>
+        <div className={`text-xs truncate ${isOff ? 'text-gray-600' : 'text-gray-500'}`}>
+          {agent.current_task || '空闲'}
         </div>
-      ))}
-    </div>
-  )
-}
-
-// Pending Approvals Component
-function PendingApprovals() {
-  const approvals = [
-    { id: '1', title: 'BTC/USDT 交易计划', type: 'trading', urgency: 'high', from: '交易主管' },
-    { id: '2', title: '新增研究员招聘提案', type: 'hiring', urgency: 'normal', from: 'CPO' },
-    { id: '3', title: '策略 MeanRev_v2 上线', type: 'strategy', urgency: 'normal', from: 'CIO' },
-  ]
-
-  return (
-    <div className="space-y-3">
-      {approvals.map((item) => (
-        <div
-          key={item.id}
-          className="p-3 bg-terminal-muted/30 rounded-lg border-l-2 border-accent-warning hover:bg-terminal-muted/50 transition-colors cursor-pointer"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-200">{item.title}</span>
-            {item.urgency === 'high' && (
-              <span className="badge badge-danger text-[10px]">紧急</span>
-            )}
-          </div>
-          <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-            <span>来自 {item.from}</span>
-            <span>·</span>
-            <span className="text-accent-warning">{item.type}</span>
-          </div>
-        </div>
-      ))}
-      <Link href="/approvals" className="block text-center text-sm text-accent-primary hover:underline">
-        查看全部待审批 →
-      </Link>
-    </div>
-  )
-}
-
-// Research Cycles Component
-function ResearchCycles() {
-  const cycles = [
-    { id: 'RC-001', name: 'BTC 动量策略', stage: 'RISK_REVIEW', progress: 70 },
-    { id: 'RC-002', name: 'ETH 均值回归', stage: 'BACKTEST', progress: 45 },
-    { id: 'RC-003', name: '跨市场套利', stage: 'DATA_GATE', progress: 20 },
-  ]
-
-  const getStageColor = (stage: string) => {
-    const colors: Record<string, string> = {
-      'DATA_GATE': 'bg-blue-500',
-      'BACKTEST': 'bg-purple-500',
-      'RISK_REVIEW': 'bg-orange-500',
-      'IC_REVIEW': 'bg-yellow-500',
-      'BOARD': 'bg-accent-primary',
-    }
-    return colors[stage] || 'bg-gray-500'
-  }
-
-  return (
-    <div className="space-y-4">
-      {cycles.map((cycle) => (
-        <div key={cycle.id} className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-sm text-gray-200">{cycle.name}</span>
-              <span className="text-xs text-gray-500 ml-2">{cycle.id}</span>
-            </div>
-            <span className="badge badge-neutral text-[10px]">{cycle.stage}</span>
-          </div>
-          <div className="h-1.5 bg-terminal-muted rounded-full overflow-hidden">
-            <div
-              className={`h-full ${getStageColor(cycle.stage)} transition-all`}
-              style={{ width: `${cycle.progress}%` }}
-            />
-          </div>
-        </div>
-      ))}
-    </div>
+      </div>
+      <ArrowRight className={`w-4 h-4 shrink-0 ${isOff ? 'text-gray-700' : 'text-gray-500'}`} />
+    </Link>
   )
 }
 
 export default function DashboardPage() {
+  const { data: healthData } = useSWR(`${API_BASE}/health`, fetcher, { refreshInterval: 5000 })
+  const { data: agentsData } = useSWR(`${API_BASE}/api/org-chart`, fetcher, { refreshInterval: 10000 })
+  const { data: approvalsData } = useSWR(`${API_BASE}/api/approvals/pending`, fetcher, { refreshInterval: 10000 })
+  const { data: eventsData } = useSWR(`${API_BASE}/api/events/recent?limit=8`, fetcher, { refreshInterval: 3000 })
+  const { data: agentSystemStatus } = useSWR(`${API_BASE}/api/system/agent-status`, fetcher, { refreshInterval: 3000 })
+  
+  const isBackendConnected = !!healthData
+  const isAgentRunning = agentSystemStatus?.is_running || false
+  
+  // 部门数据
+  const departments = [
+    { name: '董事会办公室', nameEn: 'Board Office', agentCount: 2, activeCount: 2, icon: Building2, color: 'bg-purple-500', href: '/org#board' },
+    { name: '研究部', nameEn: 'Research Guild', agentCount: 6, activeCount: 5, icon: FlaskConical, color: 'bg-blue-500', href: '/org#research' },
+    { name: '风控部', nameEn: 'Risk Guild', agentCount: 3, activeCount: 3, icon: Shield, color: 'bg-orange-500', href: '/org#risk' },
+    { name: '交易部', nameEn: 'Trading Guild', agentCount: 4, activeCount: 4, icon: TrendingUp, color: 'bg-green-500', href: '/org#trading' },
+    { name: '情报部', nameEn: 'Intelligence Guild', agentCount: 5, activeCount: 4, icon: Brain, color: 'bg-cyan-500', href: '/org#intelligence' },
+    { name: '治理部', nameEn: 'Governance', agentCount: 3, activeCount: 3, icon: Target, color: 'bg-pink-500', href: '/org#governance' },
+  ]
+  
+  const pendingApprovals = approvalsData?.approvals || [
+    { id: '1', title: 'BTC 动量策略执行计划', type: '交易', urgency: 'high', from: '交易主管', owner: 'CRO' },
+    { id: '2', title: '新增情绪分析工具请求', type: '工具', urgency: 'normal', from: 'Alpha A 组长', owner: 'CTO*' },
+    { id: '3', title: '风控规则调整提案', type: '治理', urgency: 'normal', from: 'CRO', owner: '投票中' },
+  ]
+  
+  const defaultAgents = [
+    { id: 'cio', name: 'CIO', current_task: '审核策略提案' },
+    { id: 'head_of_research', name: '研究总监', current_task: '主持策略评审' },
+    { id: 'cro', name: 'CRO', current_task: '风险评估' },
+    { id: 'head_trader', name: '交易主管', current_task: '执行监控' },
+    { id: 'alpha_a_lead', name: 'Alpha A 组长', current_task: '策略研究' },
+  ]
+  
+  const activeAgents = defaultAgents.map(a => ({
+    ...a,
+    status: isAgentRunning ? 'active' : 'off',
+    current_task: isAgentRunning ? a.current_task : '未上班',
+  }))
+  
+  const recentEvents = eventsData?.events || [
+    { time: '17:38', agent: 'Alpha A 组长', action: '提交策略回测报告', type: 'research' },
+    { time: '17:35', agent: 'CRO', action: '完成风险评估', type: 'risk' },
+    { time: '17:32', agent: '交易主管', action: '确认执行计划', type: 'trade' },
+    { time: '17:28', agent: '情报总监', action: '发布市场预警', type: 'intelligence' },
+  ]
+  
   return (
     <div className="space-y-6 animate-slide-in">
+      {/* Backend Status Banner */}
+      {!isBackendConnected && (
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-yellow-400 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-yellow-200 font-medium">后端未连接</p>
+            <p className="text-xs text-yellow-400 truncate">
+              请启动: <code className="bg-terminal-muted px-1 rounded">python -m uvicorn dashboard.api.main:app --port 8000</code>
+            </p>
+          </div>
+        </div>
+      )}
+      
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -223,9 +230,9 @@ export default function DashboardPage() {
       <div className="grid grid-cols-5 gap-4">
         <StatCard
           title="活跃 Agent"
-          value="18"
-          change="2 新增本周"
-          changeType="positive"
+          value={isAgentRunning ? "34" : "0"}
+          change={isAgentRunning ? "运行中" : "未启动"}
+          changeType={isAgentRunning ? "positive" : "neutral"}
           icon={Users}
         />
         <StatCard
@@ -237,8 +244,8 @@ export default function DashboardPage() {
         />
         <StatCard
           title="待审批"
-          value="3"
-          change="1 紧急"
+          value={pendingApprovals.length}
+          change={`${pendingApprovals.filter((a: any) => a.urgency === 'high').length} 紧急`}
           changeType="negative"
           icon={CheckSquare}
         />
@@ -259,43 +266,60 @@ export default function DashboardPage() {
         />
       </div>
 
+      {/* 部门概览 */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-100">公司组织</h2>
+          <Link href="/org" className="text-xs text-accent-primary hover:underline">
+            查看组织架构 →
+          </Link>
+        </div>
+        <div className="grid grid-cols-6 gap-4">
+          {departments.map((dept) => (
+            <DepartmentCard key={dept.nameEn} {...dept} />
+          ))}
+        </div>
+      </div>
+
       {/* Main Content Grid */}
       <div className="grid grid-cols-3 gap-6">
-        {/* Left Column - Agent Status */}
+        {/* 待审批 */}
+        <div className="card">
+          <div className="flex items-center gap-2 mb-4">
+            <AlertTriangle className="w-5 h-5 text-accent-warning" />
+            <h2 className="text-lg font-semibold text-gray-100">待您审批</h2>
+            <span className="badge badge-warning text-xs ml-auto">{pendingApprovals.length}</span>
+          </div>
+          <div className="space-y-3">
+            {pendingApprovals.slice(0, 4).map((item: any) => (
+              <ApprovalItem key={item.id} item={item} />
+            ))}
+          </div>
+          <Link href="/approvals" className="block text-center text-sm text-accent-primary hover:underline mt-4">
+            查看全部待审批 →
+          </Link>
+        </div>
+
+        {/* 活跃 Agent */}
         <div className="card">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-100">Agent 状态</h2>
-            <Link href="/org" className="text-xs text-accent-primary hover:underline">
-              查看全部
-            </Link>
+            <h2 className="text-lg font-semibold text-gray-100">当前活跃</h2>
+            <span className="flex items-center gap-1 text-xs text-accent-success">
+              <span className="status-dot active"></span>
+              {activeAgents.length} 在线
+            </span>
           </div>
-          <AgentStatusList />
+          <div className="space-y-2">
+            {activeAgents.map((agent: any) => (
+              <AgentActivityCard key={agent.id} agent={agent} />
+            ))}
+          </div>
+          <Link href="/org" className="block text-center text-sm text-accent-primary hover:underline mt-4">
+            查看全部 Agent →
+          </Link>
         </div>
 
-        {/* Middle Column - Activity & Research */}
-        <div className="space-y-6">
-          {/* Pending Approvals */}
-          <div className="card border-l-2 border-accent-warning">
-            <div className="flex items-center gap-2 mb-4">
-              <AlertTriangle className="w-5 h-5 text-accent-warning" />
-              <h2 className="text-lg font-semibold text-gray-100">待您审批</h2>
-            </div>
-            <PendingApprovals />
-          </div>
-
-          {/* Research Progress */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-100">研究进度</h2>
-              <Link href="/research" className="text-xs text-accent-primary hover:underline">
-                研究中心
-              </Link>
-            </div>
-            <ResearchCycles />
-          </div>
-        </div>
-
-        {/* Right Column - Activity Feed */}
+        {/* 实时动态 */}
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-100">实时动态</h2>
@@ -304,46 +328,63 @@ export default function DashboardPage() {
               Live
             </span>
           </div>
-          <RecentActivity />
+          <div className="space-y-3">
+            {recentEvents.map((event: any, idx: number) => (
+              <div key={idx} className="flex items-start gap-3 text-sm">
+                <span className="text-xs text-gray-500 font-mono w-10 shrink-0">{event.time}</span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-gray-300">{event.agent}</span>
+                  <span className="text-gray-500 mx-1">·</span>
+                  <span className={`${
+                    event.type === 'research' ? 'text-purple-400' :
+                    event.type === 'risk' ? 'text-orange-400' :
+                    event.type === 'trade' ? 'text-green-400' :
+                    event.type === 'intelligence' ? 'text-cyan-400' :
+                    'text-gray-400'
+                  }`}>{event.action}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Quick Actions */}
+      {/* 快捷入口 */}
       <div className="grid grid-cols-4 gap-4">
-        <Link href="/chat/cio" className="card-hover flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-            <Users className="w-5 h-5 text-purple-400" />
+        <Link href="/chat/cio" className="card-hover flex items-center gap-3 p-4">
+          <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center shrink-0">
+            <MessageSquare className="w-5 h-5 text-purple-400" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="text-sm font-medium text-gray-200">与 CIO 对话</div>
-            <div className="text-xs text-gray-500">投资策略讨论</div>
+            <div className="text-xs text-gray-500 truncate">投资策略讨论</div>
           </div>
         </Link>
-        <Link href="/trading" className="card-hover flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-accent-primary/20 flex items-center justify-center">
-            <TrendingUp className="w-5 h-5 text-accent-primary" />
+        <Link href="/trading" className="card-hover flex items-center gap-3 p-4">
+          <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center shrink-0">
+            <TrendingUp className="w-5 h-5 text-green-400" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="text-sm font-medium text-gray-200">交易台</div>
-            <div className="text-xs text-gray-500">持仓与执行</div>
+            <div className="text-xs text-gray-500 truncate">行情与执行</div>
           </div>
         </Link>
-        <Link href="/reports" className="card-hover flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+        <Link href="/reports" className="card-hover flex items-center gap-3 p-4">
+          <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
             <FileText className="w-5 h-5 text-blue-400" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="text-sm font-medium text-gray-200">报告中心</div>
-            <div className="text-xs text-gray-500">查看所有报告</div>
+            <div className="text-xs text-gray-500 truncate">查看所有报告</div>
           </div>
         </Link>
-        <Link href="/meetings" className="card-hover flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+        <Link href="/meetings" className="card-hover flex items-center gap-3 p-4">
+          <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center shrink-0">
             <Clock className="w-5 h-5 text-orange-400" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="text-sm font-medium text-gray-200">会议室</div>
-            <div className="text-xs text-gray-500">查看会议记录</div>
+            <div className="text-xs text-gray-500 truncate">对话与议题</div>
           </div>
         </Link>
       </div>

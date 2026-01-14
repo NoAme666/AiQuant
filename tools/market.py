@@ -17,6 +17,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
 
+# 确保环境变量加载
+from dotenv import load_dotenv
+load_dotenv()
+
 import structlog
 
 logger = structlog.get_logger()

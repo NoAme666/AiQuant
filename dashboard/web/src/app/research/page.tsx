@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import useSWR from 'swr'
 import {
   FlaskConical,
   Plus,
@@ -13,7 +14,34 @@ import {
   AlertTriangle,
   User,
   ArrowRight,
+  MessageSquare,
+  Lightbulb,
+  BarChart3,
+  ExternalLink,
+  BookOpen,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react'
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const fetcher = (url: string) => fetch(url).then(res => res.json()).catch(() => null)
+
+interface AgentMessage {
+  agent_id: string
+  agent_name: string
+  message: string
+  timestamp: string
+  type: 'comment' | 'question' | 'suggestion' | 'approval' | 'rejection'
+}
+
+interface Reference {
+  id: string
+  title: string
+  source: string
+  url?: string
+  type: 'paper' | 'data' | 'strategy' | 'meeting'
+  cited_by: string
+}
 
 interface ResearchCycle {
   id: string
@@ -24,75 +52,24 @@ interface ResearchCycle {
   owner: string
   team: string
   created_at: string
-  updated_at: string
+  updated_at?: string
   metrics?: {
     sharpe?: number
     max_dd?: number
     win_rate?: number
+    calmar?: number
+  }
+  suggestions?: string[]
+  discussion: AgentMessage[]
+  references: Reference[]
+  team_evaluation?: {
+    score: number
+    verdict: string
+    improvements: string[]
   }
 }
 
-const cycles: ResearchCycle[] = [
-  {
-    id: 'RC-2026-001',
-    name: 'BTC 动量突破策略',
-    strategy_type: 'Momentum',
-    state: 'RISK_SKEPTIC_GATE',
-    progress: 75,
-    owner: 'alpha_a_lead',
-    team: 'Alpha A',
-    created_at: '2026-01-10',
-    updated_at: '2026-01-14',
-    metrics: { sharpe: 1.85, max_dd: -0.12, win_rate: 0.58 },
-  },
-  {
-    id: 'RC-2026-002',
-    name: 'ETH 均值回归',
-    strategy_type: 'Mean Reversion',
-    state: 'BACKTEST_GATE',
-    progress: 45,
-    owner: 'alpha_a_researcher_1',
-    team: 'Alpha A',
-    created_at: '2026-01-12',
-    updated_at: '2026-01-14',
-    metrics: { sharpe: 1.42, max_dd: -0.08, win_rate: 0.62 },
-  },
-  {
-    id: 'RC-2026-003',
-    name: '跨市场资金流套利',
-    strategy_type: 'Arbitrage',
-    state: 'DATA_GATE',
-    progress: 20,
-    owner: 'alpha_b_lead',
-    team: 'Alpha B',
-    created_at: '2026-01-13',
-    updated_at: '2026-01-14',
-  },
-  {
-    id: 'RC-2026-004',
-    name: '波动率策略 v2',
-    strategy_type: 'Volatility',
-    state: 'IC_REVIEW',
-    progress: 85,
-    owner: 'alpha_b_researcher_1',
-    team: 'Alpha B',
-    created_at: '2026-01-08',
-    updated_at: '2026-01-13',
-    metrics: { sharpe: 2.1, max_dd: -0.15, win_rate: 0.55 },
-  },
-  {
-    id: 'RC-2025-089',
-    name: '趋势跟踪组合',
-    strategy_type: 'Trend Following',
-    state: 'ARCHIVE',
-    progress: 100,
-    owner: 'alpha_a_lead',
-    team: 'Alpha A',
-    created_at: '2025-12-15',
-    updated_at: '2026-01-05',
-    metrics: { sharpe: 1.65, max_dd: -0.18, win_rate: 0.52 },
-  },
-]
+// 研究周期数据从 API 获取
 
 const stateConfig: Record<string, { label: string; color: string; bgColor: string }> = {
   'IDEA_INTAKE': { label: '构思中', color: 'text-gray-400', bgColor: 'bg-gray-500' },
@@ -106,29 +83,67 @@ const stateConfig: Record<string, { label: string; color: string; bgColor: strin
   'ARCHIVE': { label: '已归档', color: 'text-gray-500', bgColor: 'bg-gray-600' },
 }
 
-function CycleCard({ cycle }: { cycle: ResearchCycle }) {
+function MessageTypeIcon({ type }: { type: AgentMessage['type'] }) {
+  switch (type) {
+    case 'suggestion':
+      return <Lightbulb className="w-3 h-3 text-yellow-400" />
+    case 'question':
+      return <AlertTriangle className="w-3 h-3 text-orange-400" />
+    case 'approval':
+      return <CheckCircle className="w-3 h-3 text-accent-success" />
+    case 'rejection':
+      return <XCircle className="w-3 h-3 text-accent-danger" />
+    default:
+      return <MessageSquare className="w-3 h-3 text-gray-400" />
+  }
+}
+
+function ReferenceTypeIcon({ type }: { type: Reference['type'] }) {
+  switch (type) {
+    case 'paper':
+      return <BookOpen className="w-3 h-3 text-blue-400" />
+    case 'data':
+      return <BarChart3 className="w-3 h-3 text-green-400" />
+    case 'strategy':
+      return <FlaskConical className="w-3 h-3 text-purple-400" />
+    case 'meeting':
+      return <MessageSquare className="w-3 h-3 text-orange-400" />
+    default:
+      return <ExternalLink className="w-3 h-3 text-gray-400" />
+  }
+}
+
+function CycleDetailCard({ cycle }: { cycle: ResearchCycle }) {
+  const [expanded, setExpanded] = useState(false)
   const state = stateConfig[cycle.state] || stateConfig['IDEA_INTAKE']
 
   return (
-    <div className="card-hover p-4">
-      <div className="flex items-start justify-between mb-3">
+    <div className="card">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500 font-mono">{cycle.id}</span>
             <span className={`badge badge-neutral text-[10px] ${state.color}`}>{state.label}</span>
           </div>
-          <h3 className="text-base font-medium text-gray-100 mt-1">{cycle.name}</h3>
-          <div className="text-xs text-gray-500 mt-0.5">{cycle.strategy_type}</div>
+          <h3 className="text-lg font-medium text-gray-100 mt-1">{cycle.name}</h3>
+          <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
+            <span>{cycle.strategy_type}</span>
+            <span>•</span>
+            <span>{cycle.team}</span>
+            <span>•</span>
+            <span>负责人: {cycle.owner}</span>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-sm text-gray-400">{cycle.progress}%</div>
+          <div className="text-xs text-gray-500">{cycle.updated_at}</div>
         </div>
       </div>
 
       {/* Progress Bar */}
-      <div className="mb-3">
-        <div className="flex items-center justify-between text-xs mb-1">
-          <span className="text-gray-500">进度</span>
-          <span className="text-gray-400">{cycle.progress}%</span>
-        </div>
-        <div className="h-1.5 bg-terminal-muted rounded-full overflow-hidden">
+      <div className="mb-4">
+        <div className="h-2 bg-terminal-muted rounded-full overflow-hidden">
           <div
             className={`h-full ${state.bgColor} transition-all`}
             style={{ width: `${cycle.progress}%` }}
@@ -138,32 +153,125 @@ function CycleCard({ cycle }: { cycle: ResearchCycle }) {
 
       {/* Metrics */}
       {cycle.metrics && (
-        <div className="grid grid-cols-3 gap-2 mb-3 py-2 border-t border-terminal-border/50">
+        <div className="grid grid-cols-4 gap-4 mb-4 py-3 border-y border-terminal-border/50">
           <div className="text-center">
-            <div className="text-sm font-medium text-gray-200">{cycle.metrics.sharpe?.toFixed(2)}</div>
+            <div className="text-lg font-bold text-gray-200">{cycle.metrics.sharpe?.toFixed(2)}</div>
             <div className="text-[10px] text-gray-500">Sharpe</div>
           </div>
           <div className="text-center">
-            <div className="text-sm font-medium text-accent-danger">{(cycle.metrics.max_dd! * 100).toFixed(1)}%</div>
+            <div className="text-lg font-bold text-accent-danger">{(cycle.metrics.max_dd! * 100).toFixed(1)}%</div>
             <div className="text-[10px] text-gray-500">Max DD</div>
           </div>
           <div className="text-center">
-            <div className="text-sm font-medium text-gray-200">{(cycle.metrics.win_rate! * 100).toFixed(0)}%</div>
+            <div className="text-lg font-bold text-gray-200">{(cycle.metrics.win_rate! * 100).toFixed(0)}%</div>
             <div className="text-[10px] text-gray-500">胜率</div>
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-bold text-gray-200">{cycle.metrics.calmar?.toFixed(2)}</div>
+            <div className="text-[10px] text-gray-500">Calmar</div>
           </div>
         </div>
       )}
 
-      {/* Footer */}
-      <div className="flex items-center justify-between pt-2 border-t border-terminal-border/50">
-        <div className="flex items-center gap-2">
-          <User className="w-3 h-3 text-gray-500" />
-          <span className="text-xs text-gray-400">{cycle.team}</span>
+      {/* Team Evaluation */}
+      {cycle.team_evaluation && (
+        <div className="mb-4 p-3 bg-terminal-muted/30 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-gray-300">团队评价</span>
+            <div className="flex items-center gap-2">
+              <span className={`text-lg font-bold ${
+                cycle.team_evaluation.score >= 80 ? 'text-accent-success' :
+                cycle.team_evaluation.score >= 60 ? 'text-yellow-400' :
+                'text-accent-danger'
+              }`}>{cycle.team_evaluation.score}</span>
+              <span className={`badge ${
+                cycle.team_evaluation.verdict === '强烈推荐' ? 'badge-success' :
+                cycle.team_evaluation.verdict === '推荐' ? 'badge-info' :
+                'badge-neutral'
+              } text-[10px]`}>{cycle.team_evaluation.verdict}</span>
+            </div>
+          </div>
+          <div className="text-xs text-gray-500">
+            <span className="font-medium">改进建议:</span>
+            <ul className="list-disc list-inside mt-1">
+              {cycle.team_evaluation.improvements.map((imp, i) => (
+                <li key={i}>{imp}</li>
+              ))}
+            </ul>
+          </div>
         </div>
-        <div className="flex items-center gap-1 text-xs text-gray-500">
-          <Clock className="w-3 h-3" />
-          {cycle.updated_at}
+      )}
+
+      {/* Agent Discussion */}
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-medium text-gray-300 flex items-center gap-2">
+            <MessageSquare className="w-4 h-4" />
+            Agent 交流记录
+          </h4>
+          <span className="text-xs text-gray-500">{cycle.discussion.length} 条</span>
         </div>
+        <div className="space-y-2 max-h-48 overflow-y-auto">
+          {cycle.discussion.map((msg, idx) => (
+            <div key={idx} className="flex gap-3 p-2 bg-terminal-muted/20 rounded">
+              <div className="shrink-0 mt-0.5">
+                <MessageTypeIcon type={msg.type} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <Link href={`/chat/${msg.agent_id}`} className="text-xs font-medium text-accent-primary hover:underline">
+                    {msg.agent_name}
+                  </Link>
+                  <span className="text-[10px] text-gray-600">{msg.timestamp}</span>
+                </div>
+                <p className="text-xs text-gray-400 mt-0.5">{msg.message}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* References */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-medium text-gray-300 flex items-center gap-2">
+            <BookOpen className="w-4 h-4" />
+            引用来源
+          </h4>
+          <span className="text-xs text-gray-500">{cycle.references.length} 条</span>
+        </div>
+        <div className="space-y-1">
+          {cycle.references.map((ref) => (
+            <div key={ref.id} className="flex items-center justify-between py-1.5 px-2 bg-terminal-muted/20 rounded">
+              <div className="flex items-center gap-2">
+                <ReferenceTypeIcon type={ref.type} />
+                <span className="text-xs text-gray-300">{ref.title}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-gray-500">{ref.source}</span>
+                <span className="text-[10px] text-gray-600">by {ref.cited_by}</span>
+                {ref.url && (
+                  <a href={ref.url} className="text-accent-primary hover:underline">
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center justify-end gap-2 mt-4 pt-4 border-t border-terminal-border/50">
+        <Link href={`/backtest/${cycle.id}`} className="btn btn-secondary btn-sm">
+          <BarChart3 className="w-4 h-4 mr-1" />
+          查看回测
+        </Link>
+        {cycle.state === 'IC_REVIEW' && (
+          <button className="btn btn-primary btn-sm">
+            审批
+          </button>
+        )}
       </div>
     </div>
   )
@@ -171,6 +279,10 @@ function CycleCard({ cycle }: { cycle: ResearchCycle }) {
 
 export default function ResearchPage() {
   const [filter, setFilter] = useState('all')
+  
+  // 从 API 获取真实数据
+  const { data: cyclesData } = useSWR(`${API_BASE}/api/v2/research-cycles`, fetcher, { refreshInterval: 5000 })
+  const cycles: ResearchCycle[] = cyclesData?.cycles || []
 
   const filteredCycles = filter === 'all'
     ? cycles
@@ -188,7 +300,7 @@ export default function ResearchPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="page-title">研究中心</h1>
-          <p className="page-subtitle">策略研究周期管理与追踪</p>
+          <p className="page-subtitle">策略研究周期管理与 Agent 协作</p>
         </div>
         <div className="flex items-center gap-3">
           <button className="btn btn-secondary btn-sm">
@@ -266,10 +378,10 @@ export default function ResearchPage() {
         </button>
       </div>
 
-      {/* Cycle Grid */}
-      <div className="grid grid-cols-3 gap-4">
+      {/* Cycle Details */}
+      <div className="space-y-6">
         {filteredCycles.map((cycle) => (
-          <CycleCard key={cycle.id} cycle={cycle} />
+          <CycleDetailCard key={cycle.id} cycle={cycle} />
         ))}
       </div>
     </div>

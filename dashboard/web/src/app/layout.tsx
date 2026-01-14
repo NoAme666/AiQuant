@@ -22,9 +22,9 @@ export default function RootLayout({
       <body className={`${inter.variable} ${jetbrains.variable} font-sans bg-terminal-bg text-gray-100 antialiased`}>
         <div className="flex min-h-screen">
           <Sidebar />
-          <div className="flex-1 ml-56">
+          <div className="flex-1 ml-56 flex flex-col min-h-screen">
             <TopBar />
-            <main className="p-6">
+            <main className="flex-1 p-6 pb-8 overflow-auto">
               {children}
             </main>
           </div>

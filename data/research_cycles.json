@@ -1,0 +1,60 @@
+{
+  "cycles": [
+    {
+      "name": "ETH 均值回归",
+      "strategy_type": "Mean Reversion",
+      "state": "BACKTEST_GATE",
+      "progress": 0,
+      "owner": "alpha_a_researcher_1",
+      "team": "Alpha A",
+      "metrics": {
+        "sharpe": 1.42,
+        "max_dd": -0.08,
+        "win_rate": 0.62,
+        "calmar": 1.78
+      },
+      "id": "RC-2026-002",
+      "created_at": "2026-01-14T18:17:09.060110",
+      "discussion": [
+        {
+          "agent_id": "alpha_a_lead",
+          "agent_name": "Alpha A 组长",
+          "message": "回测显示 Sharpe 良好，等待风控审核。",
+          "type": "comment",
+          "timestamp": "18:17",
+          "created_at": "2026-01-14T18:17:09.060266"
+        }
+      ],
+      "references": [],
+      "team_evaluation": null
+    },
+    {
+      "name": "BTC 动量突破策略",
+      "strategy_type": "Momentum",
+      "state": "RISK_SKEPTIC_GATE",
+      "progress": 0,
+      "owner": "alpha_a_lead",
+      "team": "Alpha A",
+      "metrics": {
+        "sharpe": 1.85,
+        "max_dd": -0.12,
+        "win_rate": 0.58,
+        "calmar": 1.42
+      },
+      "id": "RC-2026-001",
+      "created_at": "2026-01-14T18:17:09.059870",
+      "discussion": [
+        {
+          "agent_id": "alpha_a_lead",
+          "agent_name": "Alpha A 组长",
+          "message": "回测显示 Sharpe 良好，等待风控审核。",
+          "type": "comment",
+          "timestamp": "18:17",
+          "created_at": "2026-01-14T18:17:09.059990"
+        }
+      ],
+      "references": [],
+      "team_evaluation": null
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "meetings": [
+    {
+      "title": "投委会策略审议",
+      "topic": "波动率策略 v2 小额测试申请",
+      "status": "in_progress",
+      "start_time": "14:00",
+      "attendees": [
+        "cio",
+        "cro",
+        "pm",
+        "alpha_b_lead"
+      ],
+      "id": "MEET-001",
+      "created_at": "2026-01-14T18:17:09.060988",
+      "messages": [
+        {
+          "agent_id": "cio",
+          "agent_name": "CIO",
+          "content": "会议开始，今天的议题是波动率策略 v2 的小额测试申请。",
+          "type": "message",
+          "timestamp": "18:17",
+          "created_at": "2026-01-14T18:17:09.061090"
+        }
+      ],
+      "decisions": []
+    }
+  ]
+}

@@ -22,6 +22,7 @@ const config: Config = {
           warning: '#f59e0b',    // 警告 - 橙色
           danger: '#ef4444',     // 危险 - 红色
           success: '#22c55e',    // 成功 - 绿色
+          info: '#3b82f6',       // 信息 - 蓝色
         },
       },
       fontFamily: {

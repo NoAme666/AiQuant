@@ -1,0 +1,34 @@
+{
+  "reports": [
+    {
+      "type": "executive",
+      "title": "周度工作汇报",
+      "author": "CEO",
+      "author_id": "chief_of_staff",
+      "status": "approved",
+      "summary": "本周公司运营正常。",
+      "id": "ER-2026-003",
+      "created_at": "2026-01-14T18:17:09.060718"
+    },
+    {
+      "type": "research",
+      "title": "BTC 动量策略研究报告",
+      "author": "Alpha A 组长",
+      "author_id": "alpha_a_lead",
+      "status": "approved",
+      "summary": "策略回测显示 Sharpe 1.85。",
+      "id": "RR-2026-002",
+      "created_at": "2026-01-14T18:17:09.060630"
+    },
+    {
+      "type": "compliance",
+      "title": "周度风控合规报告",
+      "author": "CRO",
+      "author_id": "cro",
+      "status": "approved",
+      "summary": "本周所有交易符合风控规则。",
+      "id": "CR-2026-001",
+      "created_at": "2026-01-14T18:17:09.060375"
+    }
+  ]
+}

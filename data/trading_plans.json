@@ -1,0 +1,40 @@
+{
+  "plans": [
+    {
+      "name": "波动率策略 v2",
+      "strategy_type": "Volatility",
+      "state": "SIMULATION",
+      "win_rate": 0.55,
+      "sharpe": 2.1,
+      "id": "TP-20260114-A86F",
+      "created_at": "2026-01-14T18:17:09.059777",
+      "signals": [],
+      "realized_pnl": 0,
+      "total_trades": 0
+    },
+    {
+      "name": "ETH 均值回归",
+      "strategy_type": "Mean Reversion",
+      "state": "PENDING_CHAIRMAN",
+      "win_rate": 0.58,
+      "sharpe": 1.42,
+      "id": "TP-20260114-D398",
+      "created_at": "2026-01-14T18:17:09.059665",
+      "signals": [],
+      "realized_pnl": 0,
+      "total_trades": 0
+    },
+    {
+      "name": "BTC 动量策略",
+      "strategy_type": "Momentum",
+      "state": "MONITORING",
+      "win_rate": 0.62,
+      "sharpe": 1.85,
+      "id": "TP-20260114-9103",
+      "created_at": "2026-01-14T18:17:09.059518",
+      "signals": [],
+      "realized_pnl": 0,
+      "total_trades": 0
+    }
+  ]
+}
