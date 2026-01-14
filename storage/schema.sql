@@ -6,6 +6,7 @@
 -- ============================================
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "vector";  -- pgvector for memory embedding search
 
 -- ============================================
 -- 枚举类型
@@ -82,7 +83,35 @@ CREATE TYPE artifact_type AS ENUM (
     'RESEARCH_REPORT',
     'CHAIRMAN_DIRECTIVE',
     'MEETING_MINUTES',
-    'TEAM_SYNTHESIS_MEMO'
+    'TEAM_SYNTHESIS_MEMO',
+    'MEETING_CARD',
+    'MEETING_PLOT',
+    'MEETING_TABLE'
+);
+
+-- 记忆范围
+CREATE TYPE memory_scope AS ENUM (
+    'private',   -- 仅自己可见
+    'team',      -- 团队可见
+    'org'        -- 全组织可见
+);
+
+-- 工具调用状态
+CREATE TYPE tool_call_status AS ENUM (
+    'requested',
+    'approved',
+    'executing',
+    'completed',
+    'failed',
+    'rejected'
+);
+
+-- 会议卡片类型
+CREATE TYPE meeting_card_type AS ENUM (
+    'metric',    -- 指标卡
+    'plot',      -- 图表
+    'table',     -- 表格
+    'summary'    -- 摘要文本
 );
 
 -- ============================================
@@ -609,6 +638,555 @@ CREATE TABLE data_versions (
 CREATE INDEX idx_data_versions_created ON data_versions(created_at DESC);
 
 -- ============================================
+-- Agent 记忆系统 (pgvector)
+-- ============================================
+
+-- Agent 记忆表
+CREATE TABLE agent_memory (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    agent_id VARCHAR(64) NOT NULL REFERENCES agents(id),
+    
+    -- 内容 (限制500字)
+    content TEXT NOT NULL CHECK (LENGTH(content) <= 500),
+    
+    -- 结构化元数据
+    tags TEXT[] NOT NULL DEFAULT '{}',
+    scope memory_scope NOT NULL DEFAULT 'private',
+    confidence FLOAT NOT NULL DEFAULT 1.0 CHECK (confidence >= 0 AND confidence <= 1),
+    
+    -- TTL
+    ttl INTERVAL,
+    expires_at TIMESTAMPTZ,
+    
+    -- 向量嵌入 (1536维，text-embedding-3-small)
+    embedding vector(1536),
+    
+    -- 强制引用 (必须指向 experiment_id, data_version_hash, artifact)
+    refs JSONB NOT NULL DEFAULT '{}',  -- {"experiment_id": "...", "data_version_hash": "...", "artifact_id": "..."}
+    
+    -- 审批状态 (private 自动批准)
+    approval_status approval_status DEFAULT 'APPROVED',
+    approved_by VARCHAR(64) REFERENCES agents(id),
+    approved_at TIMESTAMPTZ,
+    
+    -- 全文搜索
+    search_vector TSVECTOR,
+    
+    -- 时间戳
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Agent 记忆索引
+CREATE INDEX idx_agent_memory_agent ON agent_memory(agent_id);
+CREATE INDEX idx_agent_memory_scope ON agent_memory(scope);
+CREATE INDEX idx_agent_memory_tags ON agent_memory USING GIN(tags);
+CREATE INDEX idx_agent_memory_expires ON agent_memory(expires_at) WHERE expires_at IS NOT NULL;
+CREATE INDEX idx_agent_memory_embedding ON agent_memory USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX idx_agent_memory_search ON agent_memory USING GIN(search_vector);
+CREATE INDEX idx_agent_memory_approval ON agent_memory(approval_status) WHERE approval_status = 'PENDING';
+
+-- 更新记忆搜索向量触发器
+CREATE OR REPLACE FUNCTION update_memory_search_vector()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.search_vector := to_tsvector('english', NEW.content);
+    NEW.updated_at := NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER agent_memory_search_update
+    BEFORE INSERT OR UPDATE ON agent_memory
+    FOR EACH ROW EXECUTE FUNCTION update_memory_search_vector();
+
+-- 记忆审批表 (team/org 范围需要审批)
+CREATE TABLE memory_approvals (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    memory_id UUID NOT NULL REFERENCES agent_memory(id) ON DELETE CASCADE,
+    
+    -- 审批步骤
+    step INTEGER NOT NULL,
+    approver VARCHAR(64) NOT NULL REFERENCES agents(id),
+    status approval_status DEFAULT 'PENDING',
+    
+    -- 详情
+    comments TEXT,
+    
+    -- 时间
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    decided_at TIMESTAMPTZ,
+    
+    UNIQUE(memory_id, step)
+);
+
+CREATE INDEX idx_memory_approvals_memory ON memory_approvals(memory_id);
+CREATE INDEX idx_memory_approvals_status ON memory_approvals(status);
+CREATE INDEX idx_memory_approvals_approver ON memory_approvals(approver);
+
+-- ============================================
+-- 工具调用系统
+-- ============================================
+
+-- 工具调用记录表
+CREATE TABLE tool_calls (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    
+    -- 调用者
+    agent_id VARCHAR(64) NOT NULL REFERENCES agents(id),
+    
+    -- 工具信息
+    tool_name VARCHAR(128) NOT NULL,  -- e.g., 'market.get_ohlcv', 'backtest.run'
+    tool_args JSONB NOT NULL DEFAULT '{}',
+    
+    -- 状态
+    status tool_call_status DEFAULT 'requested',
+    
+    -- 权限审批 (如果需要)
+    requires_approval BOOLEAN DEFAULT FALSE,
+    approved_by VARCHAR(64) REFERENCES agents(id),
+    approval_reason TEXT,
+    
+    -- 预算
+    estimated_cost INTEGER DEFAULT 0,
+    actual_cost INTEGER DEFAULT 0,
+    
+    -- 结果
+    result JSONB,
+    error_message TEXT,
+    
+    -- 可追溯性
+    data_version_hash VARCHAR(64),
+    experiment_id VARCHAR(128),
+    artifact_ids UUID[],
+    
+    -- 时间戳
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    
+    -- 关联
+    meeting_id UUID REFERENCES meeting_requests(id),
+    research_cycle_id UUID REFERENCES research_cycles(id)
+);
+
+-- 工具调用索引
+CREATE INDEX idx_tool_calls_agent ON tool_calls(agent_id);
+CREATE INDEX idx_tool_calls_tool ON tool_calls(tool_name);
+CREATE INDEX idx_tool_calls_status ON tool_calls(status);
+CREATE INDEX idx_tool_calls_created ON tool_calls(created_at DESC);
+CREATE INDEX idx_tool_calls_meeting ON tool_calls(meeting_id) WHERE meeting_id IS NOT NULL;
+
+-- ============================================
+-- 会议展示系统
+-- ============================================
+
+-- 会议展示卡片表
+CREATE TABLE meeting_artifacts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    meeting_id UUID NOT NULL REFERENCES meeting_requests(id),
+    
+    -- 展示者
+    presenter VARCHAR(64) NOT NULL REFERENCES agents(id),
+    
+    -- 卡片信息
+    title VARCHAR(256) NOT NULL,
+    card_type meeting_card_type NOT NULL,
+    
+    -- 内容
+    data JSONB NOT NULL,  -- 卡片具体内容
+    
+    -- 引用的数据/实验
+    data_ref JSONB,  -- {"artifact_path": "...", "parquet_path": "...", "preview_rows": 20}
+    experiment_id VARCHAR(128) REFERENCES experiments(id),
+    data_version_hash VARCHAR(64),
+    
+    -- 排序
+    display_order INTEGER DEFAULT 0,
+    
+    -- 时间
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 会议展示索引
+CREATE INDEX idx_meeting_artifacts_meeting ON meeting_artifacts(meeting_id);
+CREATE INDEX idx_meeting_artifacts_presenter ON meeting_artifacts(presenter);
+CREATE INDEX idx_meeting_artifacts_type ON meeting_artifacts(card_type);
+
+-- ============================================
+-- 治理与组织进化系统 (Meta-Governance)
+-- ============================================
+
+-- 提案状态
+CREATE TYPE proposal_status AS ENUM (
+    'draft',
+    'pending_cgo',
+    'pending_chairman',
+    'approved',
+    'rejected',
+    'withdrawn'
+);
+
+-- 反馈类别
+CREATE TYPE feedback_category AS ENUM (
+    'tool_request',
+    'process_improvement',
+    'org_issue',
+    'collaboration',
+    'capability_gap'
+);
+
+-- 告警严重程度
+CREATE TYPE alert_severity AS ENUM (
+    'info',
+    'warning',
+    'critical',
+    'red_alert'
+);
+
+-- 冻结状态
+CREATE TYPE freeze_status AS ENUM (
+    'active',
+    'lifted',
+    'expired'
+);
+
+-- 招聘提案表
+CREATE TABLE hiring_proposals (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    
+    -- 基本信息
+    role_name VARCHAR(128) NOT NULL,
+    role_id VARCHAR(64),  -- 建议的 agent_id
+    department VARCHAR(64) NOT NULL,
+    
+    -- 发起人
+    proposed_by VARCHAR(64) NOT NULL REFERENCES agents(id),  -- 通常是 CPO
+    suggested_by VARCHAR(64) REFERENCES agents(id),  -- 原始建议来源（CIO/CRO/HoR等）
+    
+    -- 理由
+    justification JSONB NOT NULL,  -- ["原因1", "原因2", ...]
+    expected_roi TEXT,
+    
+    -- 试用规则
+    trial_rules JSONB,  -- {"duration": "30 days", "success_metrics": [...]}
+    
+    -- 岗位定义
+    job_spec JSONB,  -- {"persona": {...}, "capability_tier": "...", ...}
+    
+    -- 预算影响
+    estimated_weekly_budget INTEGER,
+    
+    -- 状态
+    status proposal_status DEFAULT 'draft',
+    
+    -- 审批记录
+    cgo_review JSONB,  -- {"approved": true/false, "comments": "...", "at": "..."}
+    chairman_review JSONB,
+    
+    -- 时间
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    submitted_at TIMESTAMPTZ,
+    decided_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_hiring_proposals_status ON hiring_proposals(status);
+CREATE INDEX idx_hiring_proposals_proposed_by ON hiring_proposals(proposed_by);
+CREATE INDEX idx_hiring_proposals_created ON hiring_proposals(created_at DESC);
+
+-- 终止/冻结提案表
+CREATE TABLE termination_proposals (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    
+    -- 目标 Agent
+    target_agent VARCHAR(64) NOT NULL REFERENCES agents(id),
+    
+    -- 发起人
+    proposed_by VARCHAR(64) NOT NULL REFERENCES agents(id),  -- 通常是 CPO
+    
+    -- 类型
+    proposal_type VARCHAR(32) NOT NULL,  -- 'freeze', 'terminate'
+    
+    -- 证据（必须来自 2+ 独立部门）
+    evidence JSONB NOT NULL,  -- [{"source": "dept", "type": "...", "content": "..."}]
+    negative_feedback_count INTEGER DEFAULT 0,
+    independent_sources INTEGER DEFAULT 0,  -- 必须 >= 2
+    
+    -- 绩效记录
+    scorecard JSONB,  -- Agent 的综合评分卡
+    
+    -- 理由
+    justification TEXT NOT NULL,
+    
+    -- 状态
+    status proposal_status DEFAULT 'draft',
+    
+    -- 审批记录
+    cgo_review JSONB,
+    chairman_review JSONB,
+    
+    -- 时间
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    submitted_at TIMESTAMPTZ,
+    decided_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_termination_proposals_target ON termination_proposals(target_agent);
+CREATE INDEX idx_termination_proposals_status ON termination_proposals(status);
+
+-- Agent 冻结记录表
+CREATE TABLE agent_freezes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    
+    -- 被冻结的 Agent
+    agent_id VARCHAR(64) NOT NULL REFERENCES agents(id),
+    
+    -- 冻结者（通常是 CGO）
+    frozen_by VARCHAR(64) NOT NULL REFERENCES agents(id),
+    
+    -- 原因
+    reason TEXT NOT NULL,
+    evidence_refs JSONB,  -- 引用的证据
+    
+    -- 关联的终止提案（如果有）
+    termination_proposal_id UUID REFERENCES termination_proposals(id),
+    
+    -- 冻结期限
+    duration INTERVAL,
+    expires_at TIMESTAMPTZ,
+    
+    -- 状态
+    status freeze_status DEFAULT 'active',
+    
+    -- 解冻信息
+    lifted_by VARCHAR(64) REFERENCES agents(id),
+    lifted_reason TEXT,
+    lifted_at TIMESTAMPTZ,
+    
+    -- 时间
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_agent_freezes_agent ON agent_freezes(agent_id);
+CREATE INDEX idx_agent_freezes_status ON agent_freezes(status);
+CREATE INDEX idx_agent_freezes_created ON agent_freezes(created_at DESC);
+
+-- 治理告警表
+CREATE TABLE governance_alerts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    
+    -- 发起者（通常是 CGO）
+    issued_by VARCHAR(64) NOT NULL REFERENCES agents(id),
+    
+    -- 严重程度
+    severity alert_severity NOT NULL,
+    
+    -- 告警内容
+    title VARCHAR(256) NOT NULL,
+    content TEXT NOT NULL,
+    
+    -- 涉及的对象
+    target_type VARCHAR(64),  -- 'agent', 'department', 'process', 'system'
+    target_id VARCHAR(128),
+    
+    -- 类别
+    category VARCHAR(64),  -- 'collusion', 'budget_abuse', 'process_bypass', 'manipulation'
+    
+    -- 证据
+    evidence JSONB,
+    
+    -- 建议行动
+    recommended_action TEXT,
+    
+    -- 状态
+    acknowledged BOOLEAN DEFAULT FALSE,
+    acknowledged_by VARCHAR(64) REFERENCES agents(id),
+    acknowledged_at TIMESTAMPTZ,
+    resolved BOOLEAN DEFAULT FALSE,
+    resolution TEXT,
+    resolved_at TIMESTAMPTZ,
+    
+    -- 时间
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_governance_alerts_severity ON governance_alerts(severity);
+CREATE INDEX idx_governance_alerts_acknowledged ON governance_alerts(acknowledged);
+CREATE INDEX idx_governance_alerts_created ON governance_alerts(created_at DESC);
+
+-- 反馈通道表
+CREATE TABLE feedback_entries (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    
+    -- 提交者
+    submitted_by VARCHAR(64) NOT NULL REFERENCES agents(id),
+    
+    -- 类别
+    category feedback_category NOT NULL,
+    
+    -- 内容
+    title VARCHAR(256),
+    content TEXT NOT NULL,
+    
+    -- 紧急程度
+    urgency VARCHAR(16) DEFAULT 'medium',  -- 'low', 'medium', 'high', 'critical'
+    
+    -- 引用（证据）
+    refs JSONB,  -- {"experiment_id": "...", "conversation_id": "..."}
+    
+    -- 自动提取 vs 主动提交
+    source VARCHAR(32) DEFAULT 'manual',  -- 'manual', 'auto_extracted'
+    extraction_context JSONB,  -- 自动提取时的上下文
+    
+    -- 处理状态
+    status VARCHAR(32) DEFAULT 'open',  -- 'open', 'in_review', 'accepted', 'rejected', 'implemented'
+    reviewed_by VARCHAR(64) REFERENCES agents(id),
+    review_notes TEXT,
+    
+    -- 时间
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    reviewed_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_feedback_entries_category ON feedback_entries(category);
+CREATE INDEX idx_feedback_entries_status ON feedback_entries(status);
+CREATE INDEX idx_feedback_entries_submitted_by ON feedback_entries(submitted_by);
+CREATE INDEX idx_feedback_entries_created ON feedback_entries(created_at DESC);
+
+-- 工具请求表（从反馈中提取的具体工具需求）
+CREATE TABLE tool_requests (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    
+    -- 来源反馈
+    feedback_id UUID REFERENCES feedback_entries(id),
+    
+    -- 请求者
+    requested_by VARCHAR(64) NOT NULL REFERENCES agents(id),
+    
+    -- 工具信息
+    tool_name VARCHAR(128) NOT NULL,
+    tool_description TEXT NOT NULL,
+    
+    -- 预期收益
+    expected_benefit TEXT,
+    use_case TEXT,
+    
+    -- 紧急程度
+    urgency VARCHAR(16) DEFAULT 'medium',
+    
+    -- 技术评估（CTO* 填写）
+    feasibility_score FLOAT,  -- 0-1
+    estimated_effort VARCHAR(32),  -- 'small', 'medium', 'large', 'epic'
+    technical_notes TEXT,
+    
+    -- 优先级（CTO* 计算）
+    priority_score FLOAT,
+    
+    -- 状态
+    status VARCHAR(32) DEFAULT 'requested',  -- 'requested', 'evaluated', 'approved', 'in_development', 'deployed', 'rejected'
+    
+    -- 时间
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    evaluated_at TIMESTAMPTZ,
+    deployed_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_tool_requests_status ON tool_requests(status);
+CREATE INDEX idx_tool_requests_priority ON tool_requests(priority_score DESC);
+CREATE INDEX idx_tool_requests_created ON tool_requests(created_at DESC);
+
+-- 能力缺口报告表
+CREATE TABLE capability_gap_reports (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    
+    -- 报告者（通常是 CTO*）
+    reported_by VARCHAR(64) NOT NULL REFERENCES agents(id),
+    
+    -- 报告期间
+    period_start DATE NOT NULL,
+    period_end DATE NOT NULL,
+    
+    -- 内容
+    summary TEXT NOT NULL,
+    
+    -- 工具使用统计
+    tool_usage_stats JSONB,  -- {"tool_name": {"calls": N, "cost": N, "success_rate": 0.xx}}
+    
+    -- 最常请求的工具
+    most_requested_tools JSONB,  -- [{"name": "...", "request_count": N, "urgency_avg": "..."}]
+    
+    -- 能力缺口
+    capability_gaps JSONB,  -- [{"gap": "...", "impact": "...", "recommended_action": "..."}]
+    
+    -- 工具淘汰建议
+    deprecation_candidates JSONB,  -- [{"tool": "...", "reason": "...", "usage_rate": 0.xx}]
+    
+    -- 招聘建议（如果能力缺口需要人而非工具）
+    hiring_recommendations JSONB,
+    
+    -- 优先级排序的开发建议
+    development_priorities JSONB,  -- [{"priority": 1, "item": "...", "justification": "..."}]
+    
+    -- 时间
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_capability_gap_reports_period ON capability_gap_reports(period_start, period_end);
+CREATE INDEX idx_capability_gap_reports_created ON capability_gap_reports(created_at DESC);
+
+-- ============================================
+-- 治理系统视图
+-- ============================================
+
+-- 待处理提案视图
+CREATE VIEW pending_proposals AS
+SELECT 
+    'hiring' as proposal_type,
+    hp.id,
+    hp.role_name as title,
+    hp.proposed_by,
+    hp.status,
+    hp.created_at
+FROM hiring_proposals hp
+WHERE hp.status IN ('draft', 'pending_cgo', 'pending_chairman')
+UNION ALL
+SELECT 
+    'termination' as proposal_type,
+    tp.id,
+    'Terminate: ' || tp.target_agent as title,
+    tp.proposed_by,
+    tp.status,
+    tp.created_at
+FROM termination_proposals tp
+WHERE tp.status IN ('draft', 'pending_cgo', 'pending_chairman');
+
+-- 活跃冻结视图
+CREATE VIEW active_freezes AS
+SELECT 
+    af.*,
+    a.name as agent_name,
+    fb.name as frozen_by_name
+FROM agent_freezes af
+JOIN agents a ON af.agent_id = a.id
+JOIN agents fb ON af.frozen_by = fb.id
+WHERE af.status = 'active'
+  AND (af.expires_at IS NULL OR af.expires_at > NOW());
+
+-- 未解决告警视图
+CREATE VIEW unresolved_alerts AS
+SELECT ga.*
+FROM governance_alerts ga
+WHERE ga.resolved = FALSE
+ORDER BY 
+    CASE ga.severity 
+        WHEN 'red_alert' THEN 1 
+        WHEN 'critical' THEN 2 
+        WHEN 'warning' THEN 3 
+        ELSE 4 
+    END,
+    ga.created_at DESC;
+
+-- ============================================
 -- 视图
 -- ============================================
 
@@ -719,6 +1297,80 @@ BEGIN
     VALUES (p_account_id, 'spend', -p_amount, v_balance, p_operation, p_experiment_id, p_description);
     
     RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 混合搜索 Agent 记忆 (向量 + 关键词 + 标签，RRF 排序)
+CREATE OR REPLACE FUNCTION search_agent_memory(
+    p_agent_id VARCHAR(64),
+    p_query_embedding vector(1536),
+    p_query_text TEXT DEFAULT NULL,
+    p_tags TEXT[] DEFAULT NULL,
+    p_scopes memory_scope[] DEFAULT ARRAY['private']::memory_scope[],
+    p_top_k INTEGER DEFAULT 10
+)
+RETURNS TABLE (
+    memory_id UUID,
+    content TEXT,
+    tags TEXT[],
+    scope memory_scope,
+    confidence FLOAT,
+    refs JSONB,
+    rrf_score FLOAT,
+    created_at TIMESTAMPTZ
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH filtered AS (
+        -- 基础过滤：scope、tags、过期、审批状态
+        SELECT m.*
+        FROM agent_memory m
+        WHERE m.agent_id = p_agent_id
+          AND m.scope = ANY(p_scopes)
+          AND m.approval_status = 'APPROVED'
+          AND (m.expires_at IS NULL OR m.expires_at > NOW())
+          AND (p_tags IS NULL OR m.tags && p_tags)
+    ),
+    vector_ranked AS (
+        -- 向量相似度排序
+        SELECT 
+            f.id,
+            f.embedding <=> p_query_embedding AS vec_dist,
+            ROW_NUMBER() OVER (ORDER BY f.embedding <=> p_query_embedding) AS vec_rank
+        FROM filtered f
+        WHERE f.embedding IS NOT NULL
+    ),
+    text_ranked AS (
+        -- 全文搜索排序
+        SELECT 
+            f.id,
+            ts_rank_cd(f.search_vector, plainto_tsquery('english', p_query_text)) AS text_score,
+            ROW_NUMBER() OVER (ORDER BY ts_rank_cd(f.search_vector, plainto_tsquery('english', p_query_text)) DESC) AS text_rank
+        FROM filtered f
+        WHERE p_query_text IS NOT NULL 
+          AND f.search_vector @@ plainto_tsquery('english', p_query_text)
+    ),
+    combined AS (
+        -- RRF (Reciprocal Rank Fusion) 合并
+        SELECT 
+            COALESCE(v.id, t.id) AS id,
+            COALESCE(1.0 / (60 + v.vec_rank), 0) + COALESCE(1.0 / (60 + t.text_rank), 0) AS rrf_score
+        FROM vector_ranked v
+        FULL OUTER JOIN text_ranked t ON v.id = t.id
+    )
+    SELECT 
+        f.id AS memory_id,
+        f.content,
+        f.tags,
+        f.scope,
+        f.confidence,
+        f.refs,
+        c.rrf_score,
+        f.created_at
+    FROM combined c
+    JOIN filtered f ON f.id = c.id
+    ORDER BY c.rrf_score DESC
+    LIMIT p_top_k;
 END;
 $$ LANGUAGE plpgsql;
 

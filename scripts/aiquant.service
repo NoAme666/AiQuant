@@ -1,0 +1,28 @@
+[Unit]
+Description=AI Quant FastAPI Backend
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=aiquant
+Group=aiquant
+WorkingDirectory=/opt/aiquant
+Environment="PATH=/opt/aiquant/venv/bin"
+EnvironmentFile=/opt/aiquant/.env
+ExecStart=/opt/aiquant/venv/bin/uvicorn dashboard.api.main:app --host 0.0.0.0 --port 8000 --workers 4
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=10
+StandardOutput=append:/opt/aiquant/logs/stdout.log
+StandardError=append:/opt/aiquant/logs/stderr.log
+
+# 安全配置
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/aiquant
+
+[Install]
+WantedBy=multi-user.target

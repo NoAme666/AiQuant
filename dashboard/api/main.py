@@ -52,13 +52,22 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS 配置
+# CORS 配置 - 支持 Vercel 前端和本地开发
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+# 添加 Vercel 默认域名模式
+cors_origins.extend([
+    "https://aiquant.vercel.app",
+    "https://*.vercel.app",
+])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=cors_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",  # 允许所有 Vercel 子域名
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID", "X-Process-Time"],
 )
 
 

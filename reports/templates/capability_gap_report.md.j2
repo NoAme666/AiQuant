@@ -1,0 +1,147 @@
+# 能力缺口报告 (Capability Gap Report)
+
+**报告日期**: {{ report_date }}
+**报告编号**: {{ report.id }}
+**报告人**: {{ report.reported_by }}
+**报告周期**: {{ report.period.start }} ~ {{ report.period.end }}
+
+---
+
+## 摘要
+
+{{ report.summary }}
+
+---
+
+## 1. 工具使用统计
+
+本周期各工具使用情况如下：
+
+| 工具名称 | 总调用次数 | 独立用户 | 日均调用 | 成功率 | 总成本 |
+|----------|------------|----------|----------|--------|--------|
+{% for tool in report.tool_usage_stats %}
+| {{ tool.tool_name }} | {{ tool.usage.total_calls }} | {{ tool.usage.unique_agents }} | {{ tool.usage.calls_per_day }} | {{ "%.1f%%"|format(tool.reliability.success_rate * 100) }} | {{ tool.cost.total }} CP |
+{% endfor %}
+
+{% if not report.tool_usage_stats %}
+*本周期无工具调用记录*
+{% endif %}
+
+---
+
+## 2. 最常请求的工具
+
+以下是 Agent 最常请求但尚未开发的工具：
+
+| 排名 | 工具名称 | 请求次数 | 紧急程度 | 优先级评分 |
+|------|----------|----------|----------|------------|
+{% for tool in report.most_requested_tools %}
+| {{ loop.index }} | {{ tool.name }} | {{ tool.request_count }} | {{ tool.urgency }} | {{ "%.2f"|format(tool.priority_score) }} |
+{% endfor %}
+
+{% if not report.most_requested_tools %}
+*本周期无新的工具请求*
+{% endif %}
+
+---
+
+## 3. 能力缺口分析
+
+### 当前识别的能力缺口
+
+{% if report.capability_gaps %}
+{% for gap in report.capability_gaps %}
+#### {{ loop.index }}. {{ gap.gap }}
+
+- **影响**: {{ gap.impact }}
+- **建议行动**: {{ gap.recommended_action }}
+
+{% endfor %}
+{% else %}
+*当前无明显能力缺口*
+{% endif %}
+
+---
+
+## 4. 淘汰候选工具
+
+以下工具使用率较低，建议评估是否保留：
+
+{% if report.deprecation_candidates %}
+| 工具名称 | 日均调用 | 总调用 | 淘汰理由 |
+|----------|----------|--------|----------|
+{% for tool in report.deprecation_candidates %}
+| {{ tool.tool_name }} | {{ "%.2f"|format(tool.calls_per_day) }} | {{ tool.total_calls }} | {{ tool.reason }} |
+{% endfor %}
+{% else %}
+*暂无建议淘汰的工具*
+{% endif %}
+
+---
+
+## 5. 开发优先级建议
+
+根据请求频率、紧急程度和可行性评估，建议以下开发顺序：
+
+{% if report.development_priorities %}
+| 优先级 | 项目 | 理由 | 预估工作量 |
+|--------|------|------|------------|
+{% for item in report.development_priorities %}
+| {{ item.priority }} | {{ item.item }} | {{ item.justification }} | {{ item.effort }} |
+{% endfor %}
+{% else %}
+*当前无待开发项目*
+{% endif %}
+
+---
+
+## 6. 招聘建议
+
+{% if report.hiring_recommendations %}
+基于能力缺口分析，以下情况可能需要招聘而非工具开发：
+
+{% for rec in report.hiring_recommendations %}
+- **{{ rec.role }}**: {{ rec.reason }}
+{% endfor %}
+{% else %}
+*当前能力缺口可通过工具开发解决，无招聘建议*
+{% endif %}
+
+---
+
+## 7. 行动项汇总
+
+### 本周期建议优先处理
+
+{% if report.development_priorities %}
+1. **开发**: {{ report.development_priorities[0].item if report.development_priorities else "无" }}
+{% endif %}
+
+{% if report.deprecation_candidates %}
+2. **评估淘汰**: {{ report.deprecation_candidates[0].tool_name if report.deprecation_candidates else "无" }}
+{% endif %}
+
+{% if report.capability_gaps %}
+3. **解决缺口**: {{ report.capability_gaps[0].gap if report.capability_gaps else "无" }}
+{% endif %}
+
+---
+
+## 附录
+
+### A. 数据来源
+
+- 工具调用日志: `tool_calls` 表
+- 反馈条目: `feedback_entries` 表
+- 工具请求: `tool_requests` 表
+
+### B. 计算方法
+
+- **优先级评分** = 请求次数 × 0.3 + 紧急程度分数 × 0.3 + 可行性 × 0.4
+- **紧急程度分数**: low=0.3, medium=0.5, high=0.8, critical=1.0
+- **淘汰阈值**: 日均调用 < 0.1 次
+
+---
+
+*本报告由 CTO* (Capability & Tooling Officer) 自动生成*
+*生成时间: {{ generated_at }}*

@@ -47,6 +47,21 @@ communication:
       - from: "cio"
         to: "all_leads"
         reason: "投委会协调需要"
+        
+      # CGO 可以直接联系任何人（治理监督）
+      - from: "cgo"
+        to: "*"
+        reason: "治理监督需要"
+        
+      # CPO 可以直接联系所有 Lead（组织管理）
+      - from: "cpo"
+        to: "all_leads"
+        reason: "组织管理需要"
+        
+      # CTO* 可以直接联系技术相关 Lead
+      - from: "cto_capability"
+        to: ["data_engineering_lead", "backtest_lead", "head_of_research"]
+        reason: "能力建设需要"
 
   # MEMO (结构化备忘录) 权限
   memo:
@@ -343,3 +358,327 @@ round_based_discussion:
     - "保存每个成员的原始回复"
     - "可追溯 Lead 汇总是否公正"
     - "支持审计回放"
+
+# ============================================
+# 工具调用权限
+# ============================================
+tools:
+  # T1: 获取 OHLCV 数据
+  "market.get_ohlcv":
+    allowed_agents:
+      - "alpha_a_*"      # Alpha A 团队
+      - "alpha_b_*"      # Alpha B 团队
+      - "head_of_research"
+      - "data_*"         # 数据部门
+      - "backtest_*"     # 回测部门
+    allowed_departments:
+      - "research_guild"
+      - "data_division"
+      - "backtest_engine"
+    max_limit: 10000
+    allowed_timeframes:
+      - "1d"
+      - "4h"
+      - "1h"
+    # 1分钟数据需要审批
+    restricted_timeframes:
+      - timeframe: "1m"
+        requires_approval_from: "data_engineering_lead"
+    cost_per_1000_rows: 1
+    
+  # T2: 获取当前报价
+  "market.get_quote":
+    allowed_agents: ["*"]  # 所有人可用
+    cost: 1
+    rate_limit:
+      requests_per_minute: 30
+      
+  # T3: 计算技术指标
+  "market.compute_indicators":
+    allowed_agents:
+      - "alpha_a_*"
+      - "alpha_b_*"
+      - "head_of_research"
+      - "backtest_*"
+    allowed_departments:
+      - "research_guild"
+      - "backtest_engine"
+    cost_per_indicator: 1
+    
+  # T4: 运行回测
+  "backtest.run":
+    allowed_agents:
+      - "alpha_a_*"
+      - "alpha_b_*"
+      - "head_of_research"
+      - "backtest_*"
+    allowed_departments:
+      - "research_guild"
+      - "backtest_engine"
+    base_cost: 50
+    requires_approval_above: 200  # 超过 200 CP 需要审批
+    approvers:
+      - "head_of_research"
+      - "backtest_lead"
+    max_robustness_perturbations: 20
+    
+  # T5: 写入记忆
+  "memory.write":
+    allowed_agents: ["*"]  # 所有人可用
+    scope_approval:
+      private: null  # 不需要审批
+      team:
+        - "team_lead"  # 由组长审批
+      org:
+        - "chief_of_staff"  # 由 CoS 审批
+        - "cro"            # CRO 复审
+    content_max_length: 500
+    must_have_refs: true  # 必须有引用
+    cost: 2
+    
+  # T6: 搜索记忆
+  "memory.search":
+    allowed_agents: ["*"]
+    scope_visibility:
+      private: "self"      # 只能搜索自己的
+      team: "team_members" # 可以搜索组内成员的
+      org: "all"           # 可以搜索所有人的（已审批的）
+    max_top_k: 50
+    cost: 1
+    
+  # T7: 会议展示
+  "meeting.present":
+    allowed_agents:
+      - "*_lead"           # 所有 Lead
+      - "head_of_*"        # 所有部门主管
+      - "cio"
+      - "cro"
+    context_required: "meeting"  # 只能在会议中调用
+    cost: 5
+    max_cards_per_presentation: 10
+
+# ============================================
+# 治理与组织权限 (Meta-Governance)
+# ============================================
+governance:
+  # CGO (首席治理官) 权限
+  cgo:
+    # 冻结权限 - 可以冻结任何 Agent（包括 Lead）
+    can_freeze:
+      scope: "*"  # 所有 Agent
+      requires_evidence: true
+      requires_reason: true
+      max_duration_hours: 720  # 最长 30 天
+      
+    # 审计权限
+    can_audit:
+      scope: "*"  # 所有 Agent、部门、流程
+      access_audit_logs: true
+      access_tool_calls: true
+      access_budget_ledger: true
+      access_reputation_scores: true
+      
+    # 告警权限
+    can_issue_alert: true
+    alert_levels: ["info", "warning", "critical", "red_alert"]
+    red_alert_notifies: ["chairman"]
+    
+    # 审核权限
+    can_review_proposals:
+      hiring: true
+      termination: true
+      
+    # 汇报线
+    reports_to: "chairman"
+    
+    # 独立性保障
+    independence:
+      - "不参与任何策略讨论"
+      - "不受 CIO/CRO/Research 管辖"
+      - "只向董事长汇报"
+      
+    # 特殊通信权限
+    dm_permissions:
+      can_dm_all: true
+      receive_from_all: true
+      
+  # CPO (首席人才官) 权限
+  cpo:
+    # 招聘提案权限
+    can_propose_hiring: true
+    hiring_proposal:
+      requires_justification: true
+      requires_budget_estimate: true
+      requires_trial_rules: true
+      
+    # 终止提案权限
+    can_propose_termination: true
+    termination_proposal:
+      requires_evidence: true
+      min_independent_sources: 2
+      requires_scorecard: true
+      
+    # 不能直接执行
+    direct_execution: false
+    requires_approval_from:
+      hiring: ["cgo", "chairman"]
+      termination: ["cgo", "chairman"]
+      
+    # 组织分析权限
+    can_analyze:
+      org_load: true
+      performance: true
+      bottlenecks: true
+      
+    # 绩效评估权限
+    can_evaluate:
+      scope: "*"  # 可以评估所有 Agent
+      
+  # CTO* (能力建设官) 权限
+  cto_capability:
+    # 工具注册表管理
+    can_manage_tool_registry: true
+    tool_registry_actions:
+      - "add_tool"
+      - "deprecate_tool"
+      - "update_tool_schema"
+      
+    # 能力缺口报告
+    can_publish_capability_report: true
+    report_frequency: "weekly"
+    
+    # 工具需求评估
+    can_evaluate_tool_requests: true
+    
+    # 自动提取权限
+    can_extract_from:
+      conversations: true
+      reports: true
+      feedback: true
+      
+    # 优先级排序权限
+    can_prioritize_development: true
+    
+# ============================================
+# 反馈通道权限
+# ============================================
+feedback_channel:
+  # 谁可以提交反馈
+  submit:
+    allowed: "*"  # 所有 Agent
+    categories:
+      - "tool_request"
+      - "process_improvement"
+      - "org_issue"
+      - "collaboration"
+      - "capability_gap"
+      
+  # 反馈处理者
+  handlers:
+    tool_request: "cto_capability"
+    process_improvement: "chief_of_staff"
+    org_issue: "cpo"
+    collaboration: "chief_of_staff"
+    capability_gap: "cto_capability"
+    
+  # Agent 义务
+  agent_obligation:
+    # 当被董事长问及时必须回答
+    on_chairman_ask: "还有什么需要公司支持的吗？"
+    required_response_options:
+      - "不需要"
+      - "需要工具（列出）"
+      - "需要人（列出岗位）"
+      - "需要制度调整"
+    mandatory: true
+
+# ============================================
+# 招聘/终止审批流程
+# ============================================
+hiring_termination:
+  # 招聘审批链
+  hiring_approval:
+    step_1:
+      actor: "requesters"
+      allowed: ["cio", "cro", "head_of_research", "cto_capability", "*"]
+      action: "建议招聘需求"
+      to: "cpo"
+      
+    step_2:
+      actor: "cpo"
+      action: "分析并创建 HiringProposal"
+      output: "HiringProposal"
+      
+    step_3:
+      actor: "cgo"
+      action: "审核制度合规性、预算影响"
+      can_reject: true
+      criteria:
+        - "是否符合组织制度"
+        - "是否有预算膨胀风险"
+        - "是否真有必要"
+        
+    step_4:
+      actor: "chairman"
+      action: "最终批准"
+      can_reject: true
+      auto_approve_threshold: null  # 无自动批准
+      
+  # 终止审批链
+  termination_approval:
+    step_1:
+      actor: "evidence_sources"
+      required_count: 2  # 至少 2 个独立来源
+      types:
+        - "低绩效评分"
+        - "Risk/Skeptic 点名"
+        - "预算滥用"
+        - "流程违规"
+        
+    step_2:
+      actor: "cpo"
+      action: "收集证据、构建 Scorecard、创建 TerminationProposal"
+      output: "TerminationProposal"
+      
+    step_3:
+      actor: "cgo"
+      action: "验证证据充分性"
+      criteria:
+        - "是否有 >= 2 个独立来源"
+        - "证据是否真实可追溯"
+        - "是否存在政治斗争因素"
+      can_reject: true
+      
+    step_4:
+      actor: "chairman"
+      action: "最终决定"
+      options:
+        - "批准冻结"
+        - "批准终止"
+        - "驳回"
+
+# ============================================
+# 工具调用约束
+# ============================================
+tool_constraints:
+  # 全局约束
+  global:
+    # 每日调用上限（按 agent）
+    daily_call_limit: 1000
+    # 每小时调用上限
+    hourly_call_limit: 100
+    # 必须产生可追溯的结果
+    require_traceability: true
+    
+  # 强制规则（写入 Agent prompt）
+  agent_rules:
+    - "当需要事实性数据/曲线/指标时，必须先调用工具获取证据"
+    - "不允许凭空编造价格走势或回测结果"
+    - "工具调用前先写出「调用理由 + 预期输出」，避免无意义消耗预算"
+    - "所有报告只能引用 experiment_id 或 data_version_hash 指向的结果"
+    
+  # 审计要求
+  audit:
+    log_all_calls: true
+    log_failed_calls: true
+    retain_days: 365

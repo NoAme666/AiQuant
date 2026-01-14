@@ -148,6 +148,59 @@
 
 ---
 
+## 7. 组织与工具改进建议
+
+> *本章节由 Meta-Governance 团队自动生成*
+
+### 7.1 当前能力瓶颈
+
+{% if capability_gaps %}
+| 缺口 | 影响 | 建议行动 |
+|------|------|----------|
+{% for gap in capability_gaps %}
+| {{ gap.gap }} | {{ gap.impact }} | {{ gap.recommended_action }} |
+{% endfor %}
+{% else %}
+当前无明显能力瓶颈。
+{% endif %}
+
+### 7.2 招聘建议
+
+{% if hiring_recommendations %}
+| 建议岗位 | 部门 | 理由 | 预估周预算 |
+|----------|------|------|------------|
+{% for rec in hiring_recommendations %}
+| {{ rec.role_name }} | {{ rec.department }} | {{ rec.justification | truncate(50) }} | {{ rec.estimated_weekly_budget }} CP |
+{% endfor %}
+{% else %}
+当前无招聘建议。
+{% endif %}
+
+### 7.3 工具开发优先级
+
+{% if tool_priorities %}
+| 优先级 | 工具 | 理由 | 工作量 |
+|--------|------|------|--------|
+{% for tool in tool_priorities %}
+| {{ tool.priority }} | {{ tool.item }} | {{ tool.justification | truncate(40) }} | {{ tool.effort }} |
+{% endfor %}
+{% else %}
+当前无工具开发需求。
+{% endif %}
+
+### 7.4 工具淘汰候选
+
+{% if deprecation_candidates %}
+以下工具使用率较低，建议评估是否淘汰：
+{% for tool in deprecation_candidates %}
+- **{{ tool.tool_name }}**: {{ tool.reason }}
+{% endfor %}
+{% else %}
+暂无建议淘汰的工具。
+{% endif %}
+
+---
+
 ## 附录
 
 ### A. 审批链记录

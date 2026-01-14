@@ -1,5 +1,5 @@
 # AI Quant Company - LLM 模型配置
-# 能力层到具体模型的映射
+# 通过 Antigravity 统一调用各 LLM 提供商
 
 # ============================================
 # 能力层映射
@@ -9,12 +9,12 @@ tiers:
   reasoning:
     description: "强推理/审查/权衡能力"
     primary:
-      provider: "anthropic"
+      provider: "antigravity"
       model: "claude-sonnet-4-20250514"
       max_tokens: 8192
       temperature: 0.7
     fallback:
-      provider: "openai"
+      provider: "antigravity"
       model: "gpt-4o"
       max_tokens: 8192
       temperature: 0.7
@@ -23,12 +23,12 @@ tiers:
   coding:
     description: "代码/工程/调试能力"
     primary:
-      provider: "openai"
+      provider: "antigravity"
       model: "gpt-4o"
       max_tokens: 8192
       temperature: 0.3
     fallback:
-      provider: "google"
+      provider: "antigravity"
       model: "gemini-2.0-flash"
       max_tokens: 8192
       temperature: 0.3
@@ -37,12 +37,12 @@ tiers:
   reporting:
     description: "报告/可读性/结构能力"
     primary:
-      provider: "anthropic"
+      provider: "antigravity"
       model: "claude-sonnet-4-20250514"
       max_tokens: 16384
       temperature: 0.5
     fallback:
-      provider: "openai"
+      provider: "antigravity"
       model: "gpt-4o"
       max_tokens: 16384
       temperature: 0.5
@@ -54,19 +54,19 @@ tiers:
 anti_homogeneity:
   # 研究团队 A 使用 Gemini 系列
   research_team_a:
-    provider: "google"
+    provider: "antigravity"
     model: "gemini-2.0-flash"
     reasoning: "Team A 使用 Gemini，与 Team B 形成差异化思维"
     
   # 研究团队 B 使用 OpenAI 系列
   research_team_b:
-    provider: "openai"
+    provider: "antigravity"
     model: "gpt-4o"
     reasoning: "Team B 使用 GPT，与 Team A 形成差异化思维"
     
   # 否决组使用 Anthropic 系列
   veto_group:
-    provider: "anthropic"
+    provider: "antigravity"
     model: "claude-sonnet-4-20250514"
     reasoning: "否决组必须与研究组不同，确保独立审查"
     applies_to:
@@ -78,38 +78,34 @@ anti_homogeneity:
 # Provider 配置
 # ============================================
 providers:
-  openai:
-    base_url: null  # 使用默认
-    api_key_env: "OPENAI_API_KEY"
+  # Antigravity 作为统一的 LLM 网关 (OpenAI-compatible API)
+  antigravity:
+    base_url_env: "ANTIGRAVITY_BASE_URL"
+    api_key_env: "ANTIGRAVITY_API_KEY"
     retry_attempts: 3
     retry_delay: 1.0
     timeout: 120
+    # 通过 Antigravity 可访问的模型
     models:
       - "gpt-4o"
       - "gpt-4o-mini"
       - "gpt-4-turbo"
-      
-  anthropic:
-    base_url: null
-    api_key_env: "ANTHROPIC_API_KEY"
-    retry_attempts: 3
-    retry_delay: 1.0
-    timeout: 120
-    models:
       - "claude-sonnet-4-20250514"
       - "claude-3-5-sonnet-20241022"
       - "claude-3-haiku-20240307"
-      
-  google:
-    base_url: null
-    api_key_env: "GOOGLE_API_KEY"
-    retry_attempts: 3
-    retry_delay: 1.0
-    timeout: 120
-    models:
       - "gemini-2.0-flash"
       - "gemini-1.5-pro"
       - "gemini-1.5-flash"
+
+# ============================================
+# Embedding 配置
+# ============================================
+embedding:
+  provider: "antigravity"
+  model_env: "EMBEDDING_MODEL"
+  dimensions_env: "EMBEDDING_DIMENSIONS"
+  default_model: "text-embedding-3-small"
+  default_dimensions: 1536
 
 # ============================================
 # 全局设置

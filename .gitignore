@@ -90,3 +90,4 @@ Thumbs.db
 *.pem
 *.key
 secrets/
+credentials.txt

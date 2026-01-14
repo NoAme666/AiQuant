@@ -4,7 +4,7 @@ Agent Runtime 基类
 
 提供:
 - Agent 基础属性与方法
-- LLM 调用封装
+- LLM 调用封装 (通过 Antigravity)
 - 消息发送与接收
 - 任务执行框架
 """
@@ -15,7 +15,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
-from uuid import UUID, uuid4
 
 import structlog
 import yaml
@@ -56,7 +55,7 @@ class MessageType(str, Enum):
 @dataclass
 class Message:
     """消息"""
-    id: UUID = field(default_factory=uuid4)
+    id: str = field(default_factory=lambda: str(__import__('uuid').uuid4()))
     message_type: MessageType = MessageType.DM
     from_agent: str = ""
     to_agent: Optional[str] = None
@@ -70,7 +69,7 @@ class Message:
 @dataclass
 class Memo:
     """结构化备忘录"""
-    id: UUID = field(default_factory=uuid4)
+    id: str = field(default_factory=lambda: str(__import__('uuid').uuid4()))
     title: str = ""
     author: str = ""
     
@@ -96,7 +95,7 @@ class TaskResult:
     output: Any = None
     error: Optional[str] = None
     compute_points_used: int = 0
-    artifacts: list[UUID] = field(default_factory=list)
+    artifacts: list[str] = field(default_factory=list)
     duration_seconds: float = 0.0
 
 
@@ -175,6 +174,15 @@ class LLMClient(ABC):
     ) -> dict:
         """带工具调用的生成"""
         pass
+    
+    @abstractmethod
+    async def embed(
+        self,
+        text: str,
+        model: Optional[str] = None,
+    ) -> list[float]:
+        """生成文本嵌入向量"""
+        pass
 
 
 class MockLLMClient(LLMClient):
@@ -198,6 +206,305 @@ class MockLLMClient(LLMClient):
         max_tokens: int = 4096,
     ) -> dict:
         return {"response": "[Mock Response]", "tool_calls": []}
+    
+    async def embed(
+        self,
+        text: str,
+        model: Optional[str] = None,
+    ) -> list[float]:
+        # Return a mock embedding vector (1536 dimensions)
+        import random
+        return [random.uniform(-1, 1) for _ in range(1536)]
+
+
+class AntigravityLLMClient(LLMClient):
+    """Antigravity LLM 客户端
+    
+    通过 Antigravity 服务调用各种 LLM（OpenAI-compatible API）
+    """
+    
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+        default_model: str = "gpt-4o",
+        embedding_model: str = "text-embedding-3-small",
+        timeout: float = 120.0,
+    ):
+        """初始化 Antigravity 客户端
+        
+        Args:
+            api_key: API 密钥，默认从环境变量 ANTIGRAVITY_API_KEY 读取
+            base_url: API 基础 URL，默认从环境变量 ANTIGRAVITY_BASE_URL 读取
+            default_model: 默认使用的模型
+            embedding_model: 默认的嵌入模型
+            timeout: 请求超时时间（秒）
+        """
+        self.api_key = api_key or os.getenv("ANTIGRAVITY_API_KEY")
+        self.base_url = base_url or os.getenv("ANTIGRAVITY_BASE_URL")
+        self.default_model = default_model
+        self.embedding_model = embedding_model or os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+        self.timeout = timeout
+        
+        if not self.api_key:
+            raise ValueError("ANTIGRAVITY_API_KEY is required")
+        if not self.base_url:
+            raise ValueError("ANTIGRAVITY_BASE_URL is required")
+        
+        # 延迟导入 openai 库
+        self._client = None
+        self._async_client = None
+        
+        logger.info(
+            "Antigravity LLM Client 初始化",
+            base_url=self.base_url,
+            default_model=self.default_model,
+        )
+    
+    def _get_client(self):
+        """获取同步 OpenAI 客户端"""
+        if self._client is None:
+            from openai import OpenAI
+            self._client = OpenAI(
+                api_key=self.api_key,
+                base_url=self.base_url,
+                timeout=self.timeout,
+            )
+        return self._client
+    
+    def _get_async_client(self):
+        """获取异步 OpenAI 客户端"""
+        if self._async_client is None:
+            from openai import AsyncOpenAI
+            self._async_client = AsyncOpenAI(
+                api_key=self.api_key,
+                base_url=self.base_url,
+                timeout=self.timeout,
+            )
+        return self._async_client
+    
+    async def complete(
+        self,
+        messages: list[dict],
+        model: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> str:
+        """生成回复
+        
+        Args:
+            messages: 消息列表
+            model: 使用的模型
+            temperature: 温度参数
+            max_tokens: 最大生成 token 数
+            
+        Returns:
+            生成的回复文本
+        """
+        client = self._get_async_client()
+        model = model or self.default_model
+        
+        try:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            
+            result = response.choices[0].message.content or ""
+            
+            logger.debug(
+                "LLM 请求完成",
+                model=model,
+                input_messages=len(messages),
+                output_length=len(result),
+                usage=response.usage.model_dump() if response.usage else None,
+            )
+            
+            return result
+            
+        except Exception as e:
+            logger.error(
+                "LLM 请求失败",
+                model=model,
+                error=str(e),
+            )
+            raise
+    
+    async def complete_with_tools(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+        model: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> dict:
+        """带工具调用的生成
+        
+        Args:
+            messages: 消息列表
+            tools: 工具定义列表（OpenAI function calling 格式）
+            model: 使用的模型
+            temperature: 温度参数
+            max_tokens: 最大生成 token 数
+            
+        Returns:
+            包含 response 和 tool_calls 的字典
+        """
+        client = self._get_async_client()
+        model = model or self.default_model
+        
+        try:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            
+            message = response.choices[0].message
+            result = {
+                "response": message.content or "",
+                "tool_calls": [],
+            }
+            
+            # 处理工具调用
+            if message.tool_calls:
+                for tool_call in message.tool_calls:
+                    result["tool_calls"].append({
+                        "id": tool_call.id,
+                        "name": tool_call.function.name,
+                        "arguments": tool_call.function.arguments,
+                    })
+            
+            logger.debug(
+                "LLM 工具调用请求完成",
+                model=model,
+                tool_calls_count=len(result["tool_calls"]),
+                usage=response.usage.model_dump() if response.usage else None,
+            )
+            
+            return result
+            
+        except Exception as e:
+            logger.error(
+                "LLM 工具调用请求失败",
+                model=model,
+                error=str(e),
+            )
+            raise
+    
+    async def embed(
+        self,
+        text: str,
+        model: Optional[str] = None,
+    ) -> list[float]:
+        """生成文本嵌入向量
+        
+        Args:
+            text: 输入文本
+            model: 嵌入模型
+            
+        Returns:
+            嵌入向量
+        """
+        client = self._get_async_client()
+        model = model or self.embedding_model
+        
+        try:
+            response = await client.embeddings.create(
+                model=model,
+                input=text,
+            )
+            
+            embedding = response.data[0].embedding
+            
+            logger.debug(
+                "嵌入请求完成",
+                model=model,
+                input_length=len(text),
+                embedding_dim=len(embedding),
+            )
+            
+            return embedding
+            
+        except Exception as e:
+            logger.error(
+                "嵌入请求失败",
+                model=model,
+                error=str(e),
+            )
+            raise
+    
+    async def embed_batch(
+        self,
+        texts: list[str],
+        model: Optional[str] = None,
+    ) -> list[list[float]]:
+        """批量生成文本嵌入向量
+        
+        Args:
+            texts: 输入文本列表
+            model: 嵌入模型
+            
+        Returns:
+            嵌入向量列表
+        """
+        client = self._get_async_client()
+        model = model or self.embedding_model
+        
+        try:
+            response = await client.embeddings.create(
+                model=model,
+                input=texts,
+            )
+            
+            embeddings = [item.embedding for item in response.data]
+            
+            logger.debug(
+                "批量嵌入请求完成",
+                model=model,
+                batch_size=len(texts),
+                embedding_dim=len(embeddings[0]) if embeddings else 0,
+            )
+            
+            return embeddings
+            
+        except Exception as e:
+            logger.error(
+                "批量嵌入请求失败",
+                model=model,
+                error=str(e),
+            )
+            raise
+
+
+# ============================================
+# LLM 客户端工厂
+# ============================================
+
+def create_llm_client(
+    provider: str = "antigravity",
+    **kwargs,
+) -> LLMClient:
+    """创建 LLM 客户端
+    
+    Args:
+        provider: 提供商名称 ("antigravity" 或 "mock")
+        **kwargs: 传递给客户端的参数
+        
+    Returns:
+        LLM 客户端实例
+    """
+    if provider == "mock":
+        return MockLLMClient()
+    elif provider == "antigravity":
+        return AntigravityLLMClient(**kwargs)
+    else:
+        raise ValueError(f"Unknown LLM provider: {provider}")
 
 
 # ============================================
@@ -316,7 +623,7 @@ class BaseAgent(ABC):
         """获取未读消息"""
         return [m for m in self._inbox if m.read_at is None]
     
-    def mark_as_read(self, message_id: UUID) -> None:
+    def mark_as_read(self, message_id: str) -> None:
         """标记消息为已读"""
         for m in self._inbox:
             if m.id == message_id:
