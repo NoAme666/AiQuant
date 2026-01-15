@@ -148,30 +148,55 @@ function AgentActivityCard({ agent }: { agent: any }) {
 
 export default function DashboardPage() {
   const { data: healthData } = useSWR(`${API_BASE}/health`, fetcher, { refreshInterval: 5000 })
-  const { data: agentsData } = useSWR(`${API_BASE}/api/org-chart`, fetcher, { refreshInterval: 10000 })
-  const { data: approvalsData } = useSWR(`${API_BASE}/api/approvals/pending`, fetcher, { refreshInterval: 10000 })
-  const { data: eventsData } = useSWR(`${API_BASE}/api/events/recent?limit=8`, fetcher, { refreshInterval: 3000 })
   const { data: agentSystemStatus } = useSWR(`${API_BASE}/api/system/agent-status`, fetcher, { refreshInterval: 3000 })
+  
+  // 真实 V2 API
+  const { data: approvalsData } = useSWR(`${API_BASE}/api/v2/approvals/pending`, fetcher, { refreshInterval: 5000 })
+  const { data: researchData } = useSWR(`${API_BASE}/api/v2/research-cycles`, fetcher, { refreshInterval: 5000 })
+  const { data: signalsData } = useSWR(`${API_BASE}/api/v2/signals/pending`, fetcher, { refreshInterval: 3000 })
+  const { data: plansData } = useSWR(`${API_BASE}/api/v2/trading-plans`, fetcher, { refreshInterval: 5000 })
+  const { data: meetingsData } = useSWR(`${API_BASE}/api/v2/meetings`, fetcher, { refreshInterval: 5000 })
+  const { data: agentsStatusData } = useSWR(`${API_BASE}/api/v2/agents/status`, fetcher, { refreshInterval: 3000 })
   
   const isBackendConnected = !!healthData
   const isAgentRunning = agentSystemStatus?.is_running || false
   
-  // 部门数据
+  // 从 API 获取真实数据
+  const pendingApprovals = (approvalsData?.approvals || []).map((a: any) => ({
+    id: a.id,
+    title: a.title,
+    type: a.type === 'trading' ? '交易' : a.type === 'research' ? '研究' : a.type === 'tool' ? '工具' : '治理',
+    urgency: a.urgency,
+    from: a.requester,
+    owner: a.responsible,
+  }))
+  
+  const researchCycles = researchData?.cycles || []
+  const activeCycles = researchCycles.filter((c: any) => c.state !== 'ARCHIVE')
+  const inProgressCycles = researchCycles.filter((c: any) => !['ARCHIVE', 'BOARD_DECISION'].includes(c.state))
+  
+  const pendingSignals = signalsData?.signals || []
+  const tradingPlans = plansData?.plans || []
+  const monitoringPlans = tradingPlans.filter((p: any) => p.state === 'MONITORING')
+  
+  const meetings = meetingsData?.meetings || []
+  const inProgressMeetings = meetings.filter((m: any) => m.status === 'in_progress')
+  
+  // 部门数据（配置数据）
   const departments = [
-    { name: '董事会办公室', nameEn: 'Board Office', agentCount: 2, activeCount: 2, icon: Building2, color: 'bg-purple-500', href: '/org#board' },
-    { name: '研究部', nameEn: 'Research Guild', agentCount: 6, activeCount: 5, icon: FlaskConical, color: 'bg-blue-500', href: '/org#research' },
-    { name: '风控部', nameEn: 'Risk Guild', agentCount: 3, activeCount: 3, icon: Shield, color: 'bg-orange-500', href: '/org#risk' },
-    { name: '交易部', nameEn: 'Trading Guild', agentCount: 4, activeCount: 4, icon: TrendingUp, color: 'bg-green-500', href: '/org#trading' },
-    { name: '情报部', nameEn: 'Intelligence Guild', agentCount: 5, activeCount: 4, icon: Brain, color: 'bg-cyan-500', href: '/org#intelligence' },
-    { name: '治理部', nameEn: 'Governance', agentCount: 3, activeCount: 3, icon: Target, color: 'bg-pink-500', href: '/org#governance' },
+    { name: '董事会办公室', nameEn: 'Board Office', agentCount: 2, activeCount: isAgentRunning ? 2 : 0, icon: Building2, color: 'bg-purple-500', href: '/org#board' },
+    { name: '研究部', nameEn: 'Research Guild', agentCount: 6, activeCount: isAgentRunning ? 5 : 0, icon: FlaskConical, color: 'bg-blue-500', href: '/org#research' },
+    { name: '风控部', nameEn: 'Risk Guild', agentCount: 3, activeCount: isAgentRunning ? 3 : 0, icon: Shield, color: 'bg-orange-500', href: '/org#risk' },
+    { name: '交易部', nameEn: 'Trading Guild', agentCount: 4, activeCount: isAgentRunning ? 4 : 0, icon: TrendingUp, color: 'bg-green-500', href: '/org#trading' },
+    { name: '情报部', nameEn: 'Intelligence Guild', agentCount: 5, activeCount: isAgentRunning ? 4 : 0, icon: Brain, color: 'bg-cyan-500', href: '/org#intelligence' },
+    { name: '治理部', nameEn: 'Governance', agentCount: 3, activeCount: isAgentRunning ? 3 : 0, icon: Target, color: 'bg-pink-500', href: '/org#governance' },
   ]
   
-  const pendingApprovals = approvalsData?.approvals || [
-    { id: '1', title: 'BTC 动量策略执行计划', type: '交易', urgency: 'high', from: '交易主管', owner: 'CRO' },
-    { id: '2', title: '新增情绪分析工具请求', type: '工具', urgency: 'normal', from: 'Alpha A 组长', owner: 'CTO*' },
-    { id: '3', title: '风控规则调整提案', type: '治理', urgency: 'normal', from: 'CRO', owner: '投票中' },
-  ]
+  const totalAgents = departments.reduce((sum, d) => sum + d.agentCount, 0)
+  const activeAgentsCount = isAgentRunning ? departments.reduce((sum, d) => sum + d.activeCount, 0) : 0
   
+  // Agent 活动 - 使用 API 数据或默认
+  const agentsStatus = agentsStatusData?.agents || {}
   const defaultAgents = [
     { id: 'cio', name: 'CIO', current_task: '审核策略提案' },
     { id: 'head_of_research', name: '研究总监', current_task: '主持策略评审' },
@@ -180,17 +205,21 @@ export default function DashboardPage() {
     { id: 'alpha_a_lead', name: 'Alpha A 组长', current_task: '策略研究' },
   ]
   
-  const activeAgents = defaultAgents.map(a => ({
-    ...a,
-    status: isAgentRunning ? 'active' : 'off',
-    current_task: isAgentRunning ? a.current_task : '未上班',
-  }))
+  const activeAgents = defaultAgents.map(a => {
+    const apiStatus = agentsStatus[a.id]
+    return {
+      ...a,
+      status: isAgentRunning ? (apiStatus?.status || 'active') : 'off',
+      current_task: isAgentRunning ? (apiStatus?.current_task || a.current_task) : '未上班',
+    }
+  })
   
-  const recentEvents = eventsData?.events || [
-    { time: '17:38', agent: 'Alpha A 组长', action: '提交策略回测报告', type: 'research' },
-    { time: '17:35', agent: 'CRO', action: '完成风险评估', type: 'risk' },
-    { time: '17:32', agent: '交易主管', action: '确认执行计划', type: 'trade' },
-    { time: '17:28', agent: '情报总监', action: '发布市场预警', type: 'intelligence' },
+  // 最近事件 - 基于真实数据生成
+  const recentEvents = [
+    ...(inProgressMeetings.length > 0 ? [{ time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), agent: 'CIO', action: `正在主持: ${inProgressMeetings[0].title}`, type: 'meeting' }] : []),
+    ...(pendingSignals.length > 0 ? [{ time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), agent: '策略引擎', action: `生成 ${pendingSignals.length} 个待执行信号`, type: 'trade' }] : []),
+    ...(activeCycles.length > 0 ? [{ time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), agent: '研究部', action: `${activeCycles.length} 个研究周期进行中`, type: 'research' }] : []),
+    ...(monitoringPlans.length > 0 ? [{ time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), agent: '交易部', action: `${monitoringPlans.length} 个策略执行中`, type: 'trade' }] : []),
   ]
   
   return (
@@ -230,15 +259,15 @@ export default function DashboardPage() {
       <div className="grid grid-cols-5 gap-4">
         <StatCard
           title="活跃 Agent"
-          value={isAgentRunning ? "34" : "0"}
-          change={isAgentRunning ? "运行中" : "未启动"}
+          value={activeAgentsCount}
+          change={isAgentRunning ? `${totalAgents} 总计` : "未启动"}
           changeType={isAgentRunning ? "positive" : "neutral"}
           icon={Users}
         />
         <StatCard
           title="研究周期"
-          value="5"
-          change="3 进行中"
+          value={researchCycles.length}
+          change={`${inProgressCycles.length} 进行中`}
           changeType="neutral"
           icon={FlaskConical}
         />
@@ -246,22 +275,21 @@ export default function DashboardPage() {
           title="待审批"
           value={pendingApprovals.length}
           change={`${pendingApprovals.filter((a: any) => a.urgency === 'high').length} 紧急`}
-          changeType="negative"
+          changeType={pendingApprovals.length > 0 ? "negative" : "neutral"}
           icon={CheckSquare}
         />
         <StatCard
-          title="本周收益"
-          value="+2.4"
-          suffix="%"
-          change="+$1,240"
-          changeType="positive"
+          title="交易信号"
+          value={pendingSignals.length}
+          change={`${monitoringPlans.length} 策略执行中`}
+          changeType={pendingSignals.length > 0 ? "positive" : "neutral"}
           icon={DollarSign}
         />
         <StatCard
-          title="风险指数"
-          value="32"
-          change="低风险"
-          changeType="positive"
+          title="进行中会议"
+          value={inProgressMeetings.length}
+          change={`${meetings.length} 总计`}
+          changeType={inProgressMeetings.length > 0 ? "positive" : "neutral"}
           icon={Activity}
         />
       </div>

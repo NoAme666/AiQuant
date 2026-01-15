@@ -231,60 +231,282 @@ class MockLLMClient(LLMClient):
         return [random.uniform(-1, 1) for _ in range(1536)]
 
 
-class AntigravityLLMClient(LLMClient):
-    """Antigravity LLM 客户端
+# ============================================
+# Agent 模型配置映射
+# ============================================
+
+# 根据 Agent 角色和能力需求配置最优模型
+AGENT_MODEL_CONFIG = {
+    # === 深度推理型 (thinking_enabled=true) ===
+    # 使用 QwQ-32B (推理模型) 或 GLM-Z1 (推理增强)
+    "cio": {"model": "Qwen/QwQ-32B", "tier": "thinking"},
+    "pm": {"model": "Qwen/QwQ-32B", "tier": "thinking"},
+    "cro": {"model": "Qwen/QwQ-32B", "tier": "thinking"},
+    "skeptic": {"model": "THUDM/GLM-Z1-32B-0414", "tier": "thinking"},  # GLM 推理，用于质疑
+    "cgo": {"model": "Qwen/QwQ-32B", "tier": "thinking"},
+    "head_of_research": {"model": "Qwen/QwQ-32B", "tier": "thinking"},
+    "alpha_a_lead": {"model": "Qwen/Qwen3-30B-A3B-Thinking-2507", "tier": "thinking"},
+    "alpha_b_lead": {"model": "THUDM/GLM-Z1-32B-0414", "tier": "thinking"},  # 反叙事用 GLM 抗同质化
+    "data_quality_auditor": {"model": "Qwen/QwQ-32B", "tier": "thinking"},  # 一票否决需要深度推理
+    "black_swan": {"model": "Qwen/Qwen3-30B-A3B-Thinking-2507", "tier": "thinking"},
     
-    通过 Antigravity 服务调用各种 LLM（OpenAI-compatible API）
+    # === 代码工程型 (capability_tier: coding) ===
+    # 使用 Qwen3-Coder 系列
+    "data_engineering_lead": {"model": "Qwen/Qwen3-Coder-30B-A3B-Instruct", "tier": "coding"},
+    "data_engineer": {"model": "Qwen/Qwen3-Coder-30B-A3B-Instruct", "tier": "coding"},
+    "backtest_lead": {"model": "Qwen/Qwen3-Coder-30B-A3B-Instruct", "tier": "coding"},
+    "tcost_modeler": {"model": "Qwen/Qwen3-Coder-30B-A3B-Instruct", "tier": "coding"},
+    "robustness_lab": {"model": "Qwen/Qwen3-Coder-30B-A3B-Instruct", "tier": "coding"},
+    "execution_trader_alpha": {"model": "Qwen/Qwen3-Coder-30B-A3B-Instruct", "tier": "coding"},
+    "execution_trader_beta": {"model": "Qwen/Qwen3-Coder-30B-A3B-Instruct", "tier": "coding"},
+    "trading_analyst": {"model": "Qwen/Qwen3-Coder-30B-A3B-Instruct", "tier": "coding"},
+    "social_monitor": {"model": "Qwen/Qwen3-Coder-30B-A3B-Instruct", "tier": "coding"},
+    "onchain_analyst": {"model": "Qwen/Qwen3-Coder-30B-A3B-Instruct", "tier": "coding"},
+    "tech_scout": {"model": "Qwen/Qwen3-Coder-30B-A3B-Instruct", "tier": "coding"},
+    "cto_capability": {"model": "Qwen/Qwen3-Coder-30B-A3B-Instruct", "tier": "coding"},
+    
+    # === 通用推理型 (reasoning) ===
+    # 使用 Qwen3-32B 或 GLM-4-32B
+    "chief_of_staff": {"model": "Qwen/Qwen3-32B", "tier": "reasoning"},
+    "audit_compliance": {"model": "Qwen/Qwen3-32B", "tier": "reasoning"},
+    "cpo": {"model": "Qwen/Qwen3-32B", "tier": "reasoning"},
+    "head_trader": {"model": "Qwen/Qwen3-32B", "tier": "reasoning"},
+    "head_of_intelligence": {"model": "Qwen/Qwen3-32B", "tier": "reasoning"},
+    "news_analyst": {"model": "THUDM/GLM-4-32B-0414", "tier": "reasoning"},  # GLM 多样性
+    "sentiment_analyst": {"model": "Qwen/Qwen3-32B", "tier": "reasoning"},
+    "academic_researcher": {"model": "Qwen/Qwen3-32B", "tier": "reasoning"},
+    
+    # === 研究员 (轻量级) ===
+    # 使用 Qwen3-14B 或 GLM-4-9B (成本优化)
+    "alpha_a_researcher_1": {"model": "Qwen/Qwen3-14B", "tier": "research"},
+    "alpha_a_researcher_2": {"model": "Qwen/Qwen3-14B", "tier": "research"},
+    "alpha_b_researcher_1": {"model": "THUDM/GLM-4-9B-0414", "tier": "research"},  # 免费 GLM
+    "alpha_b_researcher_2": {"model": "THUDM/GLM-4-9B-0414", "tier": "research"},  # 免费 GLM
+}
+
+# 默认模型配置（按 tier）
+DEFAULT_TIER_MODELS = {
+    "thinking": "Qwen/QwQ-32B",
+    "coding": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+    "reasoning": "Qwen/Qwen3-32B",
+    "research": "Qwen/Qwen3-14B",
+    "free": "THUDM/GLM-4-9B-0414",
+}
+
+
+def get_agent_model(agent_id: str, capability_tier: str = "reasoning", thinking_enabled: bool = False) -> str:
+    """根据 Agent ID 获取最优模型
+    
+    Args:
+        agent_id: Agent 标识符
+        capability_tier: 能力层级 (reasoning/coding/reporting)
+        thinking_enabled: 是否启用深度思考
+        
+    Returns:
+        模型名称
+    """
+    # 优先使用配置的模型
+    if agent_id in AGENT_MODEL_CONFIG:
+        return AGENT_MODEL_CONFIG[agent_id]["model"]
+    
+    # 根据 thinking_enabled 选择
+    if thinking_enabled:
+        return DEFAULT_TIER_MODELS["thinking"]
+    
+    # 根据 capability_tier 选择
+    if capability_tier == "coding":
+        return DEFAULT_TIER_MODELS["coding"]
+    
+    return DEFAULT_TIER_MODELS["reasoning"]
+
+
+async def ping_api_endpoint(url: str, api_key: str, timeout: float = 3.0) -> tuple[bool, float]:
+    """Ping API 端点测试延迟
+    
+    Returns:
+        (success, latency_ms)
+    """
+    import aiohttp
+    import time
+    
+    try:
+        start = time.time()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{url}/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=aiohttp.ClientTimeout(total=timeout)
+            ) as resp:
+                if resp.status == 200:
+                    latency = (time.time() - start) * 1000
+                    return True, latency
+                return False, float('inf')
+    except Exception:
+        return False, float('inf')
+
+
+async def auto_select_base_url(api_key: str) -> str:
+    """自动选择最快的 API Base URL
+    
+    测试国内站和国际站的延迟，选择更快的那个
+    
+    Returns:
+        最优的 base_url
+    """
+    import asyncio
+    
+    endpoints = [
+        ("https://api.siliconflow.cn/v1", "国内站"),
+        ("https://api.siliconflow.com/v1", "国际站"),
+    ]
+    
+    # 并行 ping 所有端点
+    tasks = [ping_api_endpoint(url, api_key) for url, _ in endpoints]
+    results = await asyncio.gather(*tasks)
+    
+    # 找到延迟最低的可用端点
+    best_url = endpoints[0][0]  # 默认国内
+    best_latency = float('inf')
+    
+    for i, (success, latency) in enumerate(results):
+        url, name = endpoints[i]
+        if success and latency < best_latency:
+            best_url = url
+            best_latency = latency
+            logger.info(f"API 端点测试: {name} 延迟 {latency:.0f}ms")
+        elif not success:
+            logger.debug(f"API 端点测试: {name} 不可用")
+    
+    logger.info(f"自动选择 API: {best_url} (延迟 {best_latency:.0f}ms)")
+    return best_url
+
+
+class SiliconFlowLLMClient(LLMClient):
+    """SiliconFlow LLM 客户端
+
+    通过 SiliconFlow 服务调用 GLM、Qwen 等国产模型（OpenAI-compatible API）
+    支持模型: Qwen3, QwQ, GLM-4/4.5/Z1, DeepSeek 等
+    
+    特性:
+    - 自动 ping 选择国内/国际站
+    - 根据 Agent 角色自动选择最优模型
+    - 支持思考模型 (QwQ, GLM-Z1)
     """
     
+    # 类级别缓存：已选择的 base_url
+    _cached_base_url: Optional[str] = None
+
     def __init__(
         self,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
-        default_model: str = "gpt-4o",
-        embedding_model: str = "text-embedding-3-small",
+        default_model: str = "Qwen/Qwen3-32B",
+        thinking_model: str = "Qwen/QwQ-32B",
+        coding_model: str = "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+        embedding_model: str = "Qwen/Qwen3-Embedding-8B",
         timeout: float = 120.0,
         report_usage: bool = True,
         dashboard_url: Optional[str] = None,
+        auto_select_url: bool = True,
     ):
-        """初始化 Antigravity 客户端
-        
+        """初始化 SiliconFlow 客户端
+
         Args:
-            api_key: API 密钥，默认从环境变量 ANTIGRAVITY_API_KEY 读取
-            base_url: API 基础 URL，默认从环境变量 ANTIGRAVITY_BASE_URL 读取
-            default_model: 默认使用的模型
+            api_key: API 密钥，默认从环境变量 SILICONFLOW_API_KEY 读取
+            base_url: API 基础 URL，默认自动选择最快的端点
+            default_model: 默认使用的模型 (通用对话)
+            thinking_model: 思考模型 (深度推理，如 QwQ-32B)
+            coding_model: 代码模型 (工程任务，如 Qwen3-Coder)
             embedding_model: 默认的嵌入模型
             timeout: 请求超时时间（秒）
             report_usage: 是否报告 token 使用到 dashboard
             dashboard_url: Dashboard API URL
+            auto_select_url: 是否自动 ping 选择最快的 API 端点
         """
-        self.api_key = api_key or os.getenv("ANTIGRAVITY_API_KEY")
-        self.base_url = base_url or os.getenv("ANTIGRAVITY_BASE_URL")
-        self.default_model = default_model
-        self.embedding_model = embedding_model or os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+        self.api_key = api_key or os.getenv("SILICONFLOW_API_KEY")
+        self.auto_select_url = auto_select_url
+        
+        # Base URL: 优先使用参数/环境变量，否则使用缓存或默认国内站
+        if base_url:
+            self.base_url = base_url
+        elif os.getenv("SILICONFLOW_BASE_URL"):
+            self.base_url = os.getenv("SILICONFLOW_BASE_URL")
+        elif SiliconFlowLLMClient._cached_base_url:
+            self.base_url = SiliconFlowLLMClient._cached_base_url
+        else:
+            # 默认国内站，实际使用时会自动选择
+            self.base_url = "https://api.siliconflow.cn/v1"
+        # 模型配置 - 使用 Qwen3 和 GLM 4.5+
+        self.thinking_model = thinking_model or os.getenv("THINKING_MODEL", "Qwen/QwQ-32B")
+        self.coding_model = coding_model or os.getenv("CODING_MODEL", "Qwen/Qwen3-Coder-30B-A3B-Instruct")
+        self.default_model = default_model or os.getenv("DEFAULT_MODEL", "Qwen/Qwen3-32B")
+        self.embedding_model = embedding_model or os.getenv("EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-8B")
         self.timeout = timeout
         self.report_usage = report_usage
         self.dashboard_url = dashboard_url or os.getenv("DASHBOARD_API_URL", "http://localhost:8000")
-        
+
         # 当前 agent_id（会被 BaseAgent 设置）
         self.current_agent_id: Optional[str] = None
         
+        # 当前 Agent 的能力配置（会被 BaseAgent 设置）
+        self.current_agent_capability_tier: str = "reasoning"
+        self.current_agent_thinking_enabled: bool = False
+
         if not self.api_key:
-            raise ValueError("ANTIGRAVITY_API_KEY is required")
-        if not self.base_url:
-            raise ValueError("ANTIGRAVITY_BASE_URL is required")
-        
+            raise ValueError("SILICONFLOW_API_KEY is required")
+
         # 延迟导入 openai 库
         self._client = None
         self._async_client = None
         self._http_client = None
-        
+        self._url_selected = False  # 标记是否已经选择过 URL
+
         logger.info(
-            "Antigravity LLM Client 初始化",
+            "SiliconFlow LLM Client 初始化",
             base_url=self.base_url,
             default_model=self.default_model,
-            report_usage=report_usage,
+            thinking_model=self.thinking_model,
+            coding_model=self.coding_model,
         )
+    
+    async def ensure_best_url(self):
+        """确保使用最优的 API URL（首次调用时自动选择）"""
+        if self._url_selected or not self.auto_select_url:
+            return
+        
+        if not SiliconFlowLLMClient._cached_base_url:
+            # 首次调用，自动选择最快的端点
+            try:
+                best_url = await auto_select_base_url(self.api_key)
+                SiliconFlowLLMClient._cached_base_url = best_url
+                self.base_url = best_url
+            except Exception as e:
+                logger.warning(f"自动选择 API 端点失败: {e}，使用默认国内站")
+        else:
+            self.base_url = SiliconFlowLLMClient._cached_base_url
+        
+        self._url_selected = True
+    
+    def get_model_for_current_agent(self, thinking_enabled: bool = False) -> str:
+        """获取当前 Agent 的最优模型
+        
+        Args:
+            thinking_enabled: 是否启用深度思考（会覆盖配置）
+            
+        Returns:
+            模型名称
+        """
+        if self.current_agent_id:
+            return get_agent_model(
+                self.current_agent_id,
+                self.current_agent_capability_tier,
+                thinking_enabled or self.current_agent_thinking_enabled
+            )
+        
+        if thinking_enabled:
+            return self.thinking_model
+        
+        return self.default_model
     
     async def _report_token_usage(
         self,
@@ -351,44 +573,56 @@ class AntigravityLLMClient(LLMClient):
         thinking_enabled: bool = False,
     ) -> str:
         """生成回复
-        
+
         Args:
             messages: 消息列表
-            model: 使用的模型
+            model: 使用的模型（如不指定，自动根据 Agent 配置选择）
             temperature: 温度参数
             max_tokens: 最大生成 token 数
             thinking_enabled: 是否启用深度思考模式
-            
+
         Returns:
             生成的回复文本
         """
-        client = self._get_async_client()
-        model = model or self.default_model
+        # 确保使用最优 API 端点
+        await self.ensure_best_url()
         
-        # 如果启用 thinking 模式，注入深度思考指令
-        if thinking_enabled:
+        client = self._get_async_client()
+        
+        # 模型选择优先级：
+        # 1. 明确指定的 model 参数
+        # 2. 根据当前 Agent 配置自动选择
+        # 3. 默认模型
+        if model is None:
+            model = self.get_model_for_current_agent(thinking_enabled)
+        
+        # 如果启用 thinking 模式，可能需要切换到推理模型
+        if thinking_enabled and model == self.default_model:
+            # 默认模型不适合深度推理，切换到推理模型
+            model = self.thinking_model
+            logger.debug(f"启用深度思考，切换到推理模型: {model}")
+        
+        # 对于推理模型 (QwQ, GLM-Z1)，它们自带 reasoning_content
+        is_reasoning_model = any(x in model for x in ["QwQ", "GLM-Z1", "Thinking"])
+        
+        if thinking_enabled and not is_reasoning_model:
+            # 非推理模型但需要深度思考，添加思考提示
             thinking_instruction = """
 在回答之前，请先进行深度思考：
+1. 问题分析：核心是什么？关键要素？
+2. 多角度考量：不同利益相关方视角
+3. 风险评估：潜在风险和边界条件
+4. 逻辑推理：推理链条是否完整
+5. 反向验证：如果结论错了，可能哪里出问题？
 
-<thinking>
-1. 问题分析：这个问题的核心是什么？有哪些关键要素？
-2. 多角度考量：从不同利益相关方的角度思考
-3. 风险评估：有哪些潜在风险和边界条件？
-4. 逻辑推理：我的推理链条是否完整、有无漏洞？
-5. 反向验证：如果我的结论是错的，最可能是哪里出了问题？
-</thinking>
-
-请先在 <thinking> 标签中展示你的思考过程，然后给出最终回答。
-深度思考对于这类问题尤为重要，请确保推理充分。
+请先展示思考过程，然后给出最终回答。
 """
-            # 在用户消息前插入思考指令
             messages = messages.copy()
             if messages and messages[-1]["role"] == "user":
                 messages[-1]["content"] = thinking_instruction + "\n\n" + messages[-1]["content"]
-            
-            # 使用更低的温度确保推理更严谨
-            temperature = min(temperature, 0.5)
-            # 增加 token 限制以容纳思考过程
+        
+        # 推理需要更多 token
+        if thinking_enabled:
             max_tokens = max(max_tokens, 8192)
         
         import time
@@ -594,13 +828,13 @@ class AntigravityLLMClient(LLMClient):
 # ============================================
 
 def create_llm_client(
-    provider: str = "antigravity",
+    provider: str = "siliconflow",
     **kwargs,
 ) -> LLMClient:
     """创建 LLM 客户端
     
     Args:
-        provider: 提供商名称 ("antigravity" 或 "mock")
+        provider: 提供商名称 ("siliconflow", "antigravity" 或 "mock")
         **kwargs: 传递给客户端的参数
         
     Returns:
@@ -608,10 +842,20 @@ def create_llm_client(
     """
     if provider == "mock":
         return MockLLMClient()
+    elif provider == "siliconflow":
+        return SiliconFlowLLMClient(**kwargs)
     elif provider == "antigravity":
-        return AntigravityLLMClient(**kwargs)
+        # 兼容旧配置，但优先使用 SiliconFlow
+        if os.getenv("SILICONFLOW_API_KEY"):
+            logger.info("检测到 SiliconFlow 配置，使用 SiliconFlow")
+            return SiliconFlowLLMClient(**kwargs)
+        return SiliconFlowLLMClient(**kwargs)  # 默认使用 SiliconFlow
     else:
         raise ValueError(f"Unknown LLM provider: {provider}")
+
+
+# 向后兼容别名
+AntigravityLLMClient = SiliconFlowLLMClient
 
 
 # ============================================
@@ -630,7 +874,7 @@ class BaseAgent(ABC):
         llm_client: Optional[LLMClient] = None,
     ):
         """初始化 Agent
-        
+
         Args:
             config: Agent 配置
             llm_client: LLM 客户端
@@ -638,23 +882,36 @@ class BaseAgent(ABC):
         self.config = config
         self.llm_client = llm_client or MockLLMClient()
         
+        # 设置 LLM 客户端的 Agent 配置（用于自动模型选择）
+        if hasattr(self.llm_client, 'current_agent_id'):
+            self.llm_client.current_agent_id = config.id
+        if hasattr(self.llm_client, 'current_agent_capability_tier'):
+            self.llm_client.current_agent_capability_tier = config.capability_tier.value
+        if hasattr(self.llm_client, 'current_agent_thinking_enabled'):
+            self.llm_client.current_agent_thinking_enabled = config.thinking_enabled
+
         # 状态
         self.status = AgentStatus.ACTIVE
         self.budget_remaining: int = 0
         self.reputation_score: float = 0.5
-        
+
         # 消息队列
         self._inbox: list[Message] = []
         self._outbox: list[Message] = []
-        
+
         # 当前任务
         self._current_task: Optional[dict] = None
         
+        # 获取该 Agent 的专属模型
+        agent_model = get_agent_model(config.id, config.capability_tier.value, config.thinking_enabled)
+
         logger.info(
             "Agent 初始化",
             agent_id=self.config.id,
             name=self.config.name,
             department=self.config.department,
+            model=agent_model,
+            thinking_enabled=config.thinking_enabled,
         )
     
     @property

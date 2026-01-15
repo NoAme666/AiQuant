@@ -88,7 +88,7 @@ function MessageBubble({ message }: { message: Message }) {
   )
 }
 
-function MeetingCard({ meeting }: { meeting: Meeting }) {
+function MeetingCard({ meeting, agentStatuses }: { meeting: Meeting; agentStatuses: AgentStatus[] }) {
   const [expanded, setExpanded] = useState(meeting.status === 'in_progress')
 
   const statusConfig = {
@@ -269,7 +269,7 @@ export default function MeetingsPage() {
             </h2>
             <div className="space-y-3">
               {inProgressMeetings.map((meeting) => (
-                <MeetingCard key={meeting.id} meeting={meeting} />
+                <MeetingCard key={meeting.id} meeting={meeting} agentStatuses={agentStatuses} />
               ))}
             </div>
           </div>
@@ -284,7 +284,7 @@ export default function MeetingsPage() {
             </h2>
             <div className="space-y-3">
               {scheduledMeetings.map((meeting) => (
-                <MeetingCard key={meeting.id} meeting={meeting} />
+                <MeetingCard key={meeting.id} meeting={meeting} agentStatuses={agentStatuses} />
               ))}
             </div>
           </div>
@@ -299,7 +299,7 @@ export default function MeetingsPage() {
             </h2>
             <div className="space-y-3">
               {completedMeetings.map((meeting) => (
-                <MeetingCard key={meeting.id} meeting={meeting} />
+                <MeetingCard key={meeting.id} meeting={meeting} agentStatuses={agentStatuses} />
               ))}
             </div>
           </div>

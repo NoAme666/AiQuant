@@ -1703,15 +1703,33 @@ CREATE TABLE llm_pricing (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 初始化价格数据 (2026年1月)
+-- 初始化价格数据 (2026年1月) - 价格单位: 人民币/百万token
+-- SiliconFlow 官方定价: https://siliconflow.cn/pricing
 INSERT INTO llm_pricing (model, provider, input_price_per_million, output_price_per_million) VALUES
+    -- SiliconFlow - Qwen 系列 (推荐)
+    ('Qwen/Qwen2.5-7B-Instruct', 'siliconflow', 0.00, 0.00),          -- 免费
+    ('Qwen/Qwen2.5-14B-Instruct', 'siliconflow', 0.70, 0.70),
+    ('Qwen/Qwen2.5-32B-Instruct', 'siliconflow', 1.26, 1.26),         -- 推荐日常使用
+    ('Qwen/Qwen2.5-72B-Instruct', 'siliconflow', 4.13, 4.13),
+    ('Qwen/QwQ-32B', 'siliconflow', 1.26, 1.26),                       -- 推荐推理模型 (reasoning token 另计)
+    ('Qwen/Qwen3-30B-A3B', 'siliconflow', 1.26, 1.26),
+    ('Qwen/Qwen3-30B-A3B-Thinking', 'siliconflow', 1.26, 1.26),
+    ('Qwen/Qwen2.5-Coder-32B-Instruct', 'siliconflow', 1.26, 1.26),   -- 推荐代码模型
+    -- SiliconFlow - GLM 系列
+    ('THUDM/GLM-4-9B-0414', 'siliconflow', 0.00, 0.00),               -- 免费
+    ('THUDM/GLM-4-32B-0414', 'siliconflow', 2.00, 2.00),
+    ('THUDM/GLM-Z1-32B-0414', 'siliconflow', 2.00, 2.00),
+    ('zai-org/GLM-4.6', 'siliconflow', 2.00, 2.00),
+    -- SiliconFlow - DeepSeek 系列
+    ('deepseek-ai/DeepSeek-V3', 'siliconflow', 2.00, 8.00),
+    ('deepseek-ai/DeepSeek-R1', 'siliconflow', 4.00, 16.00),
+    -- SiliconFlow - Embedding
+    ('Qwen/Qwen3-Embedding-8B', 'siliconflow', 0.50, 0.00),
+    -- 其他提供商 (备用)
     ('gpt-4o', 'openai', 2.50, 10.00),
     ('gpt-4o-mini', 'openai', 0.15, 0.60),
     ('claude-4.5-opus', 'anthropic', 5.00, 25.00),
-    ('claude-4.5-sonnet', 'anthropic', 3.00, 15.00),
-    ('claude-3.5-haiku', 'anthropic', 0.80, 4.00),
-    ('deepseek-v3', 'deepseek', 0.27, 1.10),
-    ('antigravity', 'antigravity', 1.00, 3.00)
+    ('claude-4.5-sonnet', 'anthropic', 3.00, 15.00)
 ON CONFLICT (model) DO UPDATE SET
     input_price_per_million = EXCLUDED.input_price_per_million,
     output_price_per_million = EXCLUDED.output_price_per_million,

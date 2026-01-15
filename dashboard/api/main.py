@@ -2589,13 +2589,28 @@ _token_stats = {
 
 # LLM 价格配置 (2026年1月价格)
 LLM_PRICING = {
-    "gpt-4o": {"input": 2.50, "output": 10.00},  # per million tokens
+    # SiliconFlow - Qwen 系列 (推荐) - 价格单位: 人民币/百万token
+    "Qwen/Qwen2.5-7B-Instruct": {"input": 0.00, "output": 0.00},       # 免费
+    "Qwen/Qwen2.5-14B-Instruct": {"input": 0.70, "output": 0.70},
+    "Qwen/Qwen2.5-32B-Instruct": {"input": 1.26, "output": 1.26},      # 推荐日常
+    "Qwen/Qwen2.5-72B-Instruct": {"input": 4.13, "output": 4.13},
+    "Qwen/QwQ-32B": {"input": 1.26, "output": 1.26},                    # 推荐推理
+    "Qwen/Qwen3-30B-A3B": {"input": 1.26, "output": 1.26},
+    "Qwen/Qwen3-30B-A3B-Thinking": {"input": 1.26, "output": 1.26},
+    "Qwen/Qwen2.5-Coder-32B-Instruct": {"input": 1.26, "output": 1.26}, # 推荐代码
+    # SiliconFlow - GLM 系列
+    "THUDM/GLM-4-9B-0414": {"input": 0.00, "output": 0.00},            # 免费
+    "THUDM/GLM-4-32B-0414": {"input": 2.00, "output": 2.00},
+    "THUDM/GLM-Z1-32B-0414": {"input": 2.00, "output": 2.00},
+    "zai-org/GLM-4.6": {"input": 2.00, "output": 2.00},
+    # SiliconFlow - DeepSeek
+    "deepseek-ai/DeepSeek-V3": {"input": 2.00, "output": 8.00},
+    "deepseek-ai/DeepSeek-R1": {"input": 4.00, "output": 16.00},
+    # 其他提供商 (备用)
+    "gpt-4o": {"input": 2.50, "output": 10.00},
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
     "claude-4.5-opus": {"input": 5.00, "output": 25.00},
     "claude-4.5-sonnet": {"input": 3.00, "output": 15.00},
-    "claude-3.5-haiku": {"input": 0.80, "output": 4.00},
-    "deepseek-v3": {"input": 0.27, "output": 1.10},
-    "antigravity": {"input": 1.00, "output": 3.00},  # 估算
 }
 
 
